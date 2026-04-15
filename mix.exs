@@ -5,7 +5,7 @@ defmodule AshPhoenixGenApi.MixProject do
   Ash extension for generating PhoenixGenApi function configurations from Ash resources.
   """
 
-  @version "0.1.0"
+  @version "0.1.1"
 
   def project do
     [
@@ -61,7 +61,7 @@ defmodule AshPhoenixGenApi.MixProject do
   defp package do
     [
       maintainers: ["Manh Vu"],
-      licenses: ["MIT"],
+      licenses: ["MPL 2.0"],
       files: ~w(lib .formatter.exs mix.exs README* LICENSE* CHANGELOG*),
       links: %{
         "GitHub" => "https://github.com/ohhi-vn/ash_phoenix_gen_api",
