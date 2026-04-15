@@ -35,12 +35,13 @@ defmodule AshPhoenixGenApi.MixProject do
 
   defp deps do
     [
-      {:ash, ash_version("~> 3.5")},
-      {:spark, "~> 2.2"},
+      {:ash, ash_version("~> 3.24")},
+      {:spark, "~> 2.6"},
       {:phoenix_gen_api, "~> 2.1"},
       # Dev/Test
+      {:igniter, "~> 0.7", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.40", only: [:dev, :test], runtime: false},
-      {:ex_check, "~> 0.14", only: [:dev, :test]},
+      {:ex_check, "~> 0.16", only: [:dev, :test]},
       {:credo, ">= 0.0.0", only: [:dev, :test], runtime: false},
       {:dialyxir, ">= 0.0.0", only: [:dev, :test], runtime: false},
       {:mix_test_watch, "~> 1.0", only: [:dev, :test]},
@@ -77,7 +78,7 @@ defmodule AshPhoenixGenApi.MixProject do
       extras: [
         {"README.md", title: "Home"},
         {"documentation/tutorials/getting-started.md", title: "Getting Started"},
-        {"documentation/dsls/DSL-AshPhoenixGenApi.md",
+        {"documentation/dsls/DSL-AshPhoenixGenApi.Resource.md",
          search_data: Spark.Docs.search_data_for(AshPhoenixGenApi.Resource)},
         {"documentation/dsls/DSL-AshPhoenixGenApi.Domain.md",
          search_data: Spark.Docs.search_data_for(AshPhoenixGenApi.Domain)}
@@ -108,6 +109,11 @@ defmodule AshPhoenixGenApi.MixProject do
 
   defp aliases do
     [
+      docs: [
+        "spark.cheat_sheets",
+        "docs",
+        "spark.replace_doc_links"
+      ],
       "spark.formatter":
         "spark.formatter --extensions AshPhoenixGenApi.Resource,AshPhoenixGenApi.Domain",
       "spark.cheat_sheets":

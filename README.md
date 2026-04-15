@@ -1,3 +1,5 @@
+> ⚠️ **EXPERIMENTAL / UNDER ACTIVE DEVELOPMENT** ⚠️
+
 # AshPhoenixGenApi
 
 An Ash Framework extension for generating [PhoenixGenApi](https://github.com/ohhi-vn/phoenix_gen_api) function configurations from Ash resources and domains.
