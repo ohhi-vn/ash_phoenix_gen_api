@@ -5,7 +5,7 @@ defmodule AshPhoenixGenApi.MixProject do
   Ash extension for generating PhoenixGenApi function configurations from Ash resources.
   """
 
-  @version "0.1.1"
+  @version "0.2.0"
 
   def project do
     [
@@ -20,7 +20,8 @@ defmodule AshPhoenixGenApi.MixProject do
       docs: &docs/0,
       package: package(),
       source_url: "https://github.com/ohhi-vn/ash_phoenix_gen_api",
-      homepage_url: "https://github.com/ohhi-vn/ash_phoenix_gen_api"
+      homepage_url: "https://github.com/ohhi-vn/ash_phoenix_gen_api",
+      usage_rules: usage_rules()
     ]
   end
 
@@ -37,7 +38,7 @@ defmodule AshPhoenixGenApi.MixProject do
     [
       {:ash, ash_version("~> 3.24")},
       {:spark, "~> 2.6"},
-      {:phoenix_gen_api, "~> 2.1"},
+      {:phoenix_gen_api, "~> 2.6"},
       # Dev/Test
       {:igniter, "~> 0.7", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.40", only: [:dev, :test], runtime: false},
@@ -45,7 +46,10 @@ defmodule AshPhoenixGenApi.MixProject do
       {:credo, ">= 0.0.0", only: [:dev, :test], runtime: false},
       {:dialyxir, ">= 0.0.0", only: [:dev, :test], runtime: false},
       {:mix_test_watch, "~> 1.0", only: [:dev, :test]},
-      {:simple_sat, "~> 0.1", only: [:dev, :test]}
+      {:simple_sat, "~> 0.1", only: [:dev, :test]},
+      {:usage_rules, "~> 1.2", only: [:dev]},
+      # Test dependencies
+      {:excoveralls, "~> 0.18", only: :test}
     ]
   end
 
@@ -120,6 +124,33 @@ defmodule AshPhoenixGenApi.MixProject do
         "spark.cheat_sheets --extensions AshPhoenixGenApi.Resource,AshPhoenixGenApi.Domain",
       "spark.cheat_sheets_in_search":
         "spark.cheat_sheets_in_search --extensions AshPhoenixGenApi.Resource,AshPhoenixGenApi.Domain"
+    ]
+  end
+
+  defp usage_rules do
+    # Example for those using claude.
+    [
+      file: "CLAUDE.md",
+      # rules to include directly in CLAUDE.md
+      # :usage_rules itself provides rules for search_docs, docs, etc.
+      # use a regex to match multiple deps, or atoms/strings for specific ones
+      usage_rules: [:usage_rules, :ash, ~r/^ash_/],
+      # If your CLAUDE.md is getting too big, link instead of inlining:
+      usage_rules: [:ash, {~r/^ash_/, link: :markdown}],
+      # or use skills
+      skills: [
+        location: ".claude/skills",
+        # build skills that combine multiple usage rules
+        build: [
+          "ash-framework": [
+            # The description tells people how to use this skill.
+            description:
+              "Use this skill working with Ash Framework or any of its extensions. Always consult this when making any domain changes, features or fixes.",
+            # Include all Ash dependencies
+            usage_rules: [:ash, ~r/^ash_/]
+          ]
+        ]
+      ]
     ]
   end
 end
