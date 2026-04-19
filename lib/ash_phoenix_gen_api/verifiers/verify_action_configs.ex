@@ -21,6 +21,10 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyActionConfigs do
   5. **MFA validity** — When an explicit `mfa` is provided, the module
      must be loaded (or the function must exist if the module is loaded).
 
+  6. **Permission callback validity** — When `permission_callback` is
+     provided, it must be a valid MFA tuple `{module, function, args}`
+     where module and function are atoms and args is a list, or `nil`.
+
   ## Error Messages
 
   The verifier raises `Spark.Error.DslError` with descriptive messages
@@ -43,7 +47,8 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyActionConfigs do
          :ok <- verify_request_type_uniqueness(resource, actions),
          :ok <- verify_arg_consistency(resource, actions),
          :ok <- verify_permission_args(dsl_state, resource, actions),
-         :ok <- verify_mfa_validity(resource, actions) do
+         :ok <- verify_mfa_validity(resource, actions),
+         :ok <- verify_permission_callbacks(resource, actions) do
       :ok
     end
   end
@@ -316,6 +321,47 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyActionConfigs do
         path: [:gen_api],
         message: """
         MFA configuration errors:
+
+        #{Enum.join(errors, "\n\n")}
+        """
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Permission callback verification
+  # ---------------------------------------------------------------------------
+
+  defp verify_permission_callbacks(resource, actions) do
+    errors =
+      actions
+      |> Enum.flat_map(fn action_config ->
+        case action_config.permission_callback do
+          nil ->
+            # No callback — always valid
+            []
+
+          {mod, fun, args} when is_atom(mod) and is_atom(fun) and is_list(args) ->
+            # Valid MFA structure — we don't require the module to be loaded
+            # at compile time because it might not be compiled yet.
+            []
+
+          permission_callback ->
+            [
+              "Action `#{action_config.name}`: invalid permission_callback `#{inspect(permission_callback)}`. " <>
+                "Expected `{Module, :function, []}` where Module and function are atoms " <>
+                "and args is a list, or `nil`."
+            ]
+        end
+      end)
+
+    if errors == [] do
+      :ok
+    else
+      raise Spark.Error.DslError,
+        module: resource,
+        path: [:gen_api],
+        message: """
+        Permission callback configuration errors:
 
         #{Enum.join(errors, "\n\n")}
         """

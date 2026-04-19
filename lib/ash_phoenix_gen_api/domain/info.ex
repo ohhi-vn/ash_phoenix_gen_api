@@ -17,6 +17,7 @@ defmodule AshPhoenixGenApi.Domain.Info do
   - `gen_api_response_type/1` - Returns the default response type
   - `gen_api_request_info/1` - Returns the default request_info setting
   - `gen_api_check_permission/1` - Returns the default permission check mode
+  - `gen_api_permission_callback/1` - Returns the default permission callback MFA
   - `gen_api_version/1` - Returns the default version string
   - `gen_api_retry/1` - Returns the default retry configuration
   - `gen_api_supporter_module/1` - Returns the supporter module name
@@ -451,6 +452,41 @@ defmodule AshPhoenixGenApi.Domain.Info do
   end
 
   @doc """
+  Gets the default permission callback MFA for the domain.
+
+  Returns the permission_callback configured in the domain's `gen_api` section,
+  or `nil` if not configured.
+
+  When set, `permission_callback` takes precedence over `check_permission` and
+  is stored as `{:callback, mfa}` in the FunConfig's `check_permission` field.
+
+  The callback function receives a map with request context (same params as FunConfig)
+  and returns `true` (continue) or `false` (permission denied).
+
+  ## Parameters
+
+    - `domain` - The Ash domain module
+
+  ## Examples
+
+      iex> AshPhoenixGenApi.Domain.Info.permission_callback(MyApp.Chat)
+      nil
+
+      iex> AshPhoenixGenApi.Domain.Info.permission_callback(MyApp.Chat)
+      {MyApp.Permissions, :check, []}
+  """
+  @spec permission_callback(module()) :: {module(), atom(), [any()]} | nil
+  def permission_callback(domain) when is_atom(domain) do
+    if has_gen_api?(domain) do
+      extract_opt(gen_api_permission_callback(domain), nil)
+    else
+      nil
+    end
+  rescue
+    _ -> nil
+  end
+
+  @doc """
   Gets the effective default retry for the domain.
 
   Returns the retry configured in the domain's `gen_api` section,
@@ -478,6 +514,66 @@ defmodule AshPhoenixGenApi.Domain.Info do
     end
   rescue
     _ -> nil
+  end
+
+  @doc """
+  Gets the push_nodes configuration for the domain.
+
+  Returns the push_nodes configured in the domain's `gen_api` section,
+  or `nil` if not configured.
+
+  Can be:
+  - A list of node atoms: `[:"gateway1@host", :"gateway2@host"]`
+  - An MFA tuple that returns a node list at runtime: `{ClusterHelper, :get_gateway_nodes, []}`
+  - `nil` - No push nodes configured (default)
+
+  ## Parameters
+
+    - `domain` - The Ash domain module
+
+  ## Examples
+
+      iex> AshPhoenixGenApi.Domain.Info.push_nodes(MyApp.Chat)
+      [:"gateway1@host", :"gateway2@host"]
+
+      iex> AshPhoenixGenApi.Domain.Info.push_nodes(MyApp.Chat)
+      {ClusterHelper, :get_gateway_nodes, []}
+  """
+  @spec push_nodes(module()) :: [atom()] | {module(), atom(), [any()]} | nil
+  def push_nodes(domain) when is_atom(domain) do
+    if has_gen_api?(domain) do
+      extract_opt(gen_api_push_nodes(domain), nil)
+    else
+      nil
+    end
+  rescue
+    _ -> nil
+  end
+
+  @doc """
+  Checks whether push_on_startup is enabled for the domain.
+
+  Returns `true` if `gen_api push_on_startup` is `true`,
+  `false` otherwise (the default).
+
+  ## Parameters
+
+    - `domain` - The Ash domain module
+
+  ## Examples
+
+      iex> AshPhoenixGenApi.Domain.Info.push_on_startup?(MyApp.Chat)
+      false
+  """
+  @spec push_on_startup?(module()) :: boolean()
+  def push_on_startup?(domain) when is_atom(domain) do
+    if has_gen_api?(domain) do
+      extract_opt(gen_api_push_on_startup(domain), false)
+    else
+      false
+    end
+  rescue
+    _ -> false
   end
 
   @doc """
@@ -521,6 +617,8 @@ defmodule AshPhoenixGenApi.Domain.Info do
       version: version(domain),
       supporter_module: supporter_module(domain),
       total_fun_configs: length(fun_configs(domain)),
+      push_nodes: push_nodes(domain),
+      push_on_startup: push_on_startup?(domain),
       resources: resources
     }
   rescue

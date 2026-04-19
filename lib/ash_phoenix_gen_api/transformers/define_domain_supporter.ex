@@ -94,6 +94,43 @@ defmodule AshPhoenixGenApi.Transformers.DefineDomainSupporter do
         end
       end
 
+  ## Push Configuration Functions
+
+  When `push_nodes` is configured, the generated supporter module also includes
+  functions for actively pushing configuration to gateway nodes:
+
+      gen_api do
+        service "chat"
+        supporter_module MyApp.Chat.GenApiSupporter
+        version "0.0.1"
+        push_nodes [:"gateway1@host", :"gateway2@host"]
+        # Or use an MFA tuple for runtime resolution:
+        # push_nodes {ClusterHelper, :get_gateway_nodes, []}
+      end
+
+  This adds the following functions to the generated supporter module:
+
+      # Builds a PushConfig struct from the domain configuration
+      def build_push_config do
+        # Resolves nodes at runtime (calls MFA if configured)
+        # Returns %PushConfig{service: "chat", nodes: [...], ...}
+      end
+
+      # Pushes config to a specific gateway node
+      def push_to_gateway(server_node, opts \\ [])
+
+      # Pushes config on application startup (with enhanced logging)
+      def push_on_startup(server_node, opts \\ [])
+
+      # Verifies config version on a gateway node
+      def verify_on_gateway(server_node, opts \\ [])
+
+      # Resolves push_nodes at runtime (handles MFA tuples, lists, :local, nil)
+      def resolve_push_nodes
+
+      # Pushes config to all configured push_nodes
+      def push_to_configured_nodes(opts \\ [])
+
   ## Configuration
 
   The `define_supporter?` option controls whether the supporter module is
@@ -137,6 +174,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineDomainSupporter do
       if define_supporter? do
         version = extract_opt(Info.gen_api_version(dsl_state), "0.0.1")
         service = extract_opt(Info.gen_api_service(dsl_state), nil)
+        push_nodes = extract_opt(Info.gen_api_push_nodes(dsl_state), nil)
 
         # We use runtime resource discovery instead of compile-time enumeration
         # because resource modules may not be fully compiled when the domain
@@ -151,6 +189,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineDomainSupporter do
         domain_escaped = Macro.escape(domain)
         service_string_escaped = Macro.escape(service_string)
         version_string_escaped = Macro.escape(version_string)
+        push_nodes_escaped = Macro.escape(push_nodes)
 
         dsl_state =
           Spark.Dsl.Transformer.eval(
@@ -171,6 +210,12 @@ defmodule AshPhoenixGenApi.Transformers.DefineDomainSupporter do
                 - `fun_configs/0` - Returns the aggregated list of FunConfig structs
                 - `list_request_types/0` - Returns all available request type strings
                 - `get_fun_config/1` - Returns a specific FunConfig by request_type
+                - `build_push_config/0` - Builds a PushConfig struct from this domain's configuration
+                - `push_to_gateway/2` - Pushes config to a specified gateway node
+                - `push_on_startup/2` - Pushes config to a gateway node on startup
+                - `verify_on_gateway/2` - Verifies config version on a gateway node
+                - `resolve_push_nodes/0` - Resolves push_nodes configuration at runtime
+                - `push_to_configured_nodes/1` - Pushes config to all configured push_nodes
 
                 ## Configuration
 
@@ -233,6 +278,145 @@ defmodule AshPhoenixGenApi.Transformers.DefineDomainSupporter do
                 def list_request_types do
                   fun_configs()
                   |> Enum.map(& &1.request_type)
+                end
+
+                @doc """
+                Builds a PushConfig struct from this domain's configuration.
+
+                The `nodes` field is resolved at runtime:
+                - If `push_nodes` is an MFA tuple, it is called to get the node list
+                - If `push_nodes` is a list, it is used directly
+                - If `push_nodes` is `:local`, `[Node.self()]` is used
+                - If `push_nodes` is `nil`, the nodes field is set to `nil`
+                """
+                def build_push_config do
+                  resolved_nodes =
+                    case unquote(push_nodes_escaped) do
+                      nil -> nil
+                      :local -> [Node.self()]
+                      nodes when is_list(nodes) -> nodes
+                      {mod, fun, args} when is_atom(mod) and is_atom(fun) and is_list(args) ->
+                        apply(mod, fun, args)
+                      _ -> nil
+                    end
+
+                  struct(PhoenixGenApi.Structs.PushConfig, %{
+                    service: unquote(service_string_escaped),
+                    nodes: resolved_nodes,
+                    config_version: unquote(version_string_escaped),
+                    fun_configs: fun_configs(),
+                    module: __MODULE__,
+                    function: :get_config,
+                    args: [],
+                    version_module: __MODULE__,
+                    version_function: :get_config_version,
+                    version_args: []
+                  })
+                end
+
+                @doc """
+                Pushes this domain's configuration to the specified gateway node.
+
+                ## Parameters
+
+                  - `server_node` - The gateway node atom to push config to
+                  - `opts` - Options passed to `PhoenixGenApi.ConfigPusher.push/3`
+
+                ## Returns
+
+                  The result of `PhoenixGenApi.ConfigPusher.push/3`.
+                """
+                def push_to_gateway(server_node, opts \\ []) do
+                  push_config = build_push_config()
+                  PhoenixGenApi.ConfigPusher.push(server_node, push_config, opts)
+                end
+
+                @doc """
+                Pushes this domain's configuration to the specified gateway node on startup.
+
+                This is intended to be called during application startup to push
+                the config to gateway nodes. The push is performed asynchronously
+                and will retry according to the `PhoenixGenApi.ConfigPusher` configuration.
+
+                ## Parameters
+
+                  - `server_node` - The gateway node atom to push config to
+                  - `opts` - Options passed to `PhoenixGenApi.ConfigPusher.push_on_startup/3`
+
+                ## Returns
+
+                  The result of `PhoenixGenApi.ConfigPusher.push_on_startup/3`.
+                """
+                def push_on_startup(server_node, opts \\ []) do
+                  push_config = build_push_config()
+                  PhoenixGenApi.ConfigPusher.push_on_startup(server_node, push_config, opts)
+                end
+
+                @doc """
+                Verifies this domain's configuration version on the gateway node.
+
+                ## Parameters
+
+                  - `server_node` - The gateway node atom to verify config on
+                  - `opts` - Options passed to `PhoenixGenApi.ConfigPusher.verify/4`
+
+                ## Returns
+
+                  The result of `PhoenixGenApi.ConfigPusher.verify/4`.
+                """
+                def verify_on_gateway(server_node, opts \\ []) do
+                  PhoenixGenApi.ConfigPusher.verify(
+                    server_node,
+                    unquote(service_string_escaped),
+                    unquote(version_string_escaped),
+                    opts
+                  )
+                end
+
+                @doc """
+                Resolves the push_nodes configuration at runtime.
+
+                Returns a list of node atoms based on the configured `push_nodes`:
+                - If `push_nodes` is an MFA tuple `{Module, :function, args}`, calls it and returns the result
+                - If `push_nodes` is a list of atoms, returns it directly
+                - If `push_nodes` is `:local`, returns `[Node.self()]`
+                - If `push_nodes` is `nil`, returns `nil`
+                """
+                def resolve_push_nodes do
+                  case unquote(push_nodes_escaped) do
+                    nil -> nil
+                    :local -> [Node.self()]
+                    nodes when is_list(nodes) -> nodes
+                    {mod, fun, args} when is_atom(mod) and is_atom(fun) and is_list(args) ->
+                      apply(mod, fun, args)
+                    _ -> nil
+                  end
+                end
+
+                @doc """
+                Pushes config to all configured push_nodes.
+
+                Resolves the `push_nodes` configuration at runtime and pushes
+                the config to each node.
+
+                ## Parameters
+
+                  - `opts` - Options passed to `push_to_gateway/2`
+
+                ## Returns
+
+                  - `{:ok, results}` - A list of results from each push operation
+                  - `{:error, :no_push_nodes_configured}` - When no push_nodes are configured
+                """
+                def push_to_configured_nodes(opts \\ []) do
+                  case resolve_push_nodes() do
+                    nil ->
+                      {:error, :no_push_nodes_configured}
+
+                    nodes ->
+                      results = Enum.map(nodes, fn node -> push_to_gateway(node, opts) end)
+                      {:ok, results}
+                  end
                 end
               end
             end

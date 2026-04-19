@@ -14,6 +14,7 @@ defmodule AshPhoenixGenApi.Resource.ActionConfig do
   - `response_type` - Response mode (:sync, :async, :stream, :none)
   - `request_info` - Whether to pass request info as last argument
   - `check_permission` - Permission check mode
+  - `permission_callback` - Custom callback MFA for permission checking (takes precedence over check_permission). Callback receives `(request_type, args)` and returns `true` (continue) or `false` (denied).
   - `choose_node_mode` - Node selection strategy
   - `nodes` - Target nodes (list, MFA tuple, or :local)
   - `retry` - Retry configuration
@@ -22,6 +23,7 @@ defmodule AshPhoenixGenApi.Resource.ActionConfig do
   - `arg_types` - Explicit argument types map (overrides auto-derived)
   - `arg_orders` - Explicit argument order list (overrides auto-derived)
   - `disabled` - Whether this endpoint is disabled
+  - `code_interface?` - Whether to generate a code interface function for this action
 
   ## Resolution Order
 
@@ -41,6 +43,30 @@ defmodule AshPhoenixGenApi.Resource.ActionConfig do
           | :any_authenticated
           | {:arg, String.t()}
           | {:role, [String.t()]}
+          | {:callback, {module(), atom(), [any()]}}
+
+  @type permission_callback :: {module(), atom(), [any()]} | nil
+
+  @doc """
+  Callback function signature for permission checking.
+
+  The callback receives two arguments:
+  - `request_type` - The PhoenixGenApi request type string (e.g., `"delete_user"`)
+  - `args` - A map of request arguments (e.g., `%{"user_id" => "123", "role" => "admin"}`)
+
+  Returns `true` to allow the request, or `false` to deny permission.
+
+  ## Example
+
+      def check_permission(request_type, args) do
+        case request_type do
+          "delete_user" -> args["role"] == "admin"
+          "update_profile" -> args["user_id"] == args["target_user_id"]
+          _ -> true
+        end
+      end
+  """
+  @callback permission_callback(request_type :: String.t(), args :: map()) :: boolean()
 
   @type node_config ::
           [atom()]
@@ -72,6 +98,7 @@ defmodule AshPhoenixGenApi.Resource.ActionConfig do
           response_type: :sync | :async | :stream | :none | nil,
           request_info: boolean() | nil,
           check_permission: permission_mode() | nil,
+          permission_callback: permission_callback(),
           choose_node_mode: choose_node_mode() | nil,
           nodes: node_config() | nil,
           retry: retry_config() | nil,
@@ -80,6 +107,7 @@ defmodule AshPhoenixGenApi.Resource.ActionConfig do
           arg_types: %{String.t() => gen_api_type()} | nil,
           arg_orders: [String.t()] | nil,
           disabled: boolean(),
+          code_interface?: boolean() | nil,
           __spark_metadata__: any()
         }
 
@@ -90,6 +118,7 @@ defmodule AshPhoenixGenApi.Resource.ActionConfig do
     :response_type,
     :request_info,
     :check_permission,
+    :permission_callback,
     :choose_node_mode,
     :nodes,
     :retry,
@@ -98,6 +127,7 @@ defmodule AshPhoenixGenApi.Resource.ActionConfig do
     :arg_types,
     :arg_orders,
     disabled: false,
+    code_interface?: nil,
     __spark_metadata__: nil
   ]
 
@@ -166,6 +196,33 @@ defmodule AshPhoenixGenApi.Resource.ActionConfig do
   def effective_check_permission(%__MODULE__{check_permission: check_permission}, _default), do: check_permission
 
   @doc """
+  Resolves the effective permission_callback, falling back to the provided default.
+
+  When the action-level `permission_callback` is set, returns that value.
+  Otherwise, returns the section-level default.
+
+  The callback MFA function receives `(request_type, args)` as arguments and
+  returns `true` (continue) or `false` (permission denied).
+
+  ## Examples
+
+      iex> config = %AshPhoenixGenApi.Resource.ActionConfig{permission_callback: {MyModule, :check, []}}
+      iex> AshPhoenixGenApi.Resource.ActionConfig.effective_permission_callback(config, nil)
+      {MyModule, :check, []}
+
+      iex> config = %AshPhoenixGenApi.Resource.ActionConfig{permission_callback: nil}
+      iex> AshPhoenixGenApi.Resource.ActionConfig.effective_permission_callback(config, {MyModule, :check, []})
+      {MyModule, :check, []}
+
+      iex> config = %AshPhoenixGenApi.Resource.ActionConfig{permission_callback: nil}
+      iex> AshPhoenixGenApi.Resource.ActionConfig.effective_permission_callback(config, nil)
+      nil
+  """
+  @spec effective_permission_callback(t(), permission_callback()) :: permission_callback()
+  def effective_permission_callback(%__MODULE__{permission_callback: nil}, default), do: default
+  def effective_permission_callback(%__MODULE__{permission_callback: permission_callback}, _default), do: permission_callback
+
+  @doc """
   Resolves the effective choose_node_mode, falling back to the provided default.
   """
   @spec effective_choose_node_mode(t(), choose_node_mode()) :: choose_node_mode()
@@ -232,4 +289,24 @@ defmodule AshPhoenixGenApi.Resource.ActionConfig do
   """
   @spec enabled?(t()) :: boolean()
   def enabled?(%__MODULE__{disabled: disabled}), do: !disabled
+
+  @doc """
+  Resolves the effective code_interface? setting, falling back to the provided default.
+
+  When the action-level `code_interface?` is explicitly set (not `nil`), returns that value.
+  Otherwise, returns the section-level default.
+
+  ## Examples
+
+      iex> config = %AshPhoenixGenApi.Resource.ActionConfig{code_interface?: false}
+      iex> AshPhoenixGenApi.Resource.ActionConfig.effective_code_interface?(config, true)
+      false
+
+      iex> config = %AshPhoenixGenApi.Resource.ActionConfig{code_interface?: nil}
+      iex> AshPhoenixGenApi.Resource.ActionConfig.effective_code_interface?(config, true)
+      true
+  """
+  @spec effective_code_interface?(t(), boolean()) :: boolean()
+  def effective_code_interface?(%__MODULE__{code_interface?: nil}, default), do: default
+  def effective_code_interface?(%__MODULE__{code_interface?: code_interface?}, _default), do: code_interface?
 end

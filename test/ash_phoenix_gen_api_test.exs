@@ -1055,10 +1055,14 @@ defmodule AshPhoenixGenApi.DefaultsTest do
       assert defaults.response_type == :async
       assert defaults.request_info == true
       assert defaults.check_permission == false
+      assert defaults.permission_callback == nil
       assert defaults.choose_node_mode == :random
       assert defaults.nodes == :local
       assert defaults.version == "0.0.1"
       assert defaults.retry == nil
+      assert defaults.code_interface? == true
+      assert defaults.push_nodes == nil
+      assert defaults.push_on_startup == false
     end
   end
 
@@ -1081,6 +1085,852 @@ defmodule AshPhoenixGenApi.DefaultsTest do
       assert AshPhoenixGenApi.Domain in modules
       assert AshPhoenixGenApi.Domain.Info in modules
       assert AshPhoenixGenApi.TypeMapper in modules
+    end
+  end
+end
+
+defmodule AshPhoenixGenApi.Resource.CodeInterfaceTest do
+  use ExUnit.Case
+
+  defmodule CodeInterfaceResource do
+    use Ash.Resource,
+      domain: AshPhoenixGenApi.Resource.CodeInterfaceTest.TestDomain,
+      extensions: [AshPhoenixGenApi.Resource],
+      data_layer: Ash.DataLayer.Ets
+
+    attributes do
+      uuid_primary_key :id
+      attribute :name, :string do
+        public? true
+      end
+      attribute :content, :string do
+        public? true
+        allow_nil? true
+      end
+    end
+
+    actions do
+      create :create do
+        accept [:name, :content]
+      end
+
+      read :read do
+        primary? true
+      end
+
+      update :update do
+        accept [:name, :content]
+      end
+
+      destroy :destroy
+
+      action :greet, :string do
+        argument :name, :string do
+          allow_nil? false
+        end
+
+        run fn input, _ ->
+          {:ok, "Hello, #{input.arguments.name}!"}
+        end
+      end
+    end
+
+    gen_api do
+      service "code_interface_test"
+      code_interface? true
+
+      action :create
+      action :read
+      action :update
+      action :destroy
+      action :greet
+    end
+  end
+
+  defmodule TestDomain do
+    use Ash.Domain
+
+    resources do
+      resource CodeInterfaceResource
+    end
+  end
+
+  describe "code interface function generation" do
+    test "create action generates name/2 and name!/2 functions" do
+      assert function_exported?(CodeInterfaceResource, :create, 2)
+      assert function_exported?(CodeInterfaceResource, :create!, 2)
+    end
+
+    test "read action generates name/2 and name!/2 functions" do
+      assert function_exported?(CodeInterfaceResource, :read, 2)
+      assert function_exported?(CodeInterfaceResource, :read!, 2)
+    end
+
+    test "update action generates name/3 and name!/3 functions" do
+      assert function_exported?(CodeInterfaceResource, :update, 3)
+      assert function_exported?(CodeInterfaceResource, :update!, 3)
+    end
+
+    test "destroy action generates name/3 and name!/3 functions" do
+      assert function_exported?(CodeInterfaceResource, :destroy, 3)
+      assert function_exported?(CodeInterfaceResource, :destroy!, 3)
+    end
+
+    test "generic action generates name/2 and name!/2 functions" do
+      assert function_exported?(CodeInterfaceResource, :greet, 2)
+      assert function_exported?(CodeInterfaceResource, :greet!, 2)
+    end
+  end
+
+  describe "code interface function execution" do
+    test "create action function creates a record" do
+      assert {:ok, record} = CodeInterfaceResource.create(%{name: "test"})
+      assert %CodeInterfaceResource{} = record
+      assert record.name == "test"
+    end
+
+    test "create! action function creates a record and returns it" do
+      record = CodeInterfaceResource.create!(%{name: "test2"})
+      assert %CodeInterfaceResource{} = record
+      assert record.name == "test2"
+    end
+
+    test "read action function returns records" do
+      CodeInterfaceResource.create!(%{name: "read_test"})
+      assert {:ok, records} = CodeInterfaceResource.read()
+      assert is_list(records)
+    end
+
+    test "read! action function returns records" do
+      CodeInterfaceResource.create!(%{name: "read_test2"})
+      records = CodeInterfaceResource.read!()
+      assert is_list(records)
+    end
+
+    test "update action function updates a record" do
+      record = CodeInterfaceResource.create!(%{name: "original"})
+      assert {:ok, updated} = CodeInterfaceResource.update(record, %{name: "updated"})
+      assert updated.name == "updated"
+    end
+
+    test "update! action function updates a record and returns it" do
+      record = CodeInterfaceResource.create!(%{name: "original2"})
+      updated = CodeInterfaceResource.update!(record, %{name: "updated2"})
+      assert updated.name == "updated2"
+    end
+
+    test "destroy action function destroys a record" do
+      record = CodeInterfaceResource.create!(%{name: "to_delete"})
+      assert :ok = CodeInterfaceResource.destroy(record)
+    end
+
+    test "destroy! action function destroys a record" do
+      record = CodeInterfaceResource.create!(%{name: "to_delete2"})
+      assert :ok = CodeInterfaceResource.destroy!(record)
+    end
+
+    test "generic action function runs the action" do
+      assert {:ok, "Hello, World!"} = CodeInterfaceResource.greet(%{name: "World"})
+    end
+
+    test "generic action bang function runs the action" do
+      assert "Hello, World!" = CodeInterfaceResource.greet!(%{name: "World"})
+    end
+  end
+
+  describe "code interface with actor option" do
+    test "create action accepts actor option" do
+      assert {:ok, _record} = CodeInterfaceResource.create(%{name: "with_actor"}, actor: nil)
+    end
+
+    test "read action accepts actor option" do
+      assert {:ok, _records} = CodeInterfaceResource.read(actor: nil)
+    end
+
+    test "update action accepts actor option" do
+      record = CodeInterfaceResource.create!(%{name: "actor_test"})
+      assert {:ok, _updated} = CodeInterfaceResource.update(record, %{name: "new"}, actor: nil)
+    end
+
+    test "destroy action accepts actor option" do
+      record = CodeInterfaceResource.create!(%{name: "actor_destroy"})
+      assert :ok = CodeInterfaceResource.destroy(record, actor: nil)
+    end
+
+    test "generic action accepts actor option" do
+      assert {:ok, _result} = CodeInterfaceResource.greet(%{name: "Actor"}, actor: nil)
+    end
+  end
+end
+
+defmodule AshPhoenixGenApi.Resource.CodeInterfaceDisabledTest do
+  use ExUnit.Case
+
+  defmodule CodeInterfaceDisabledResource do
+    use Ash.Resource,
+      domain: AshPhoenixGenApi.Resource.CodeInterfaceDisabledTest.TestDomain,
+      extensions: [AshPhoenixGenApi.Resource],
+      data_layer: Ash.DataLayer.Ets
+
+    attributes do
+      uuid_primary_key :id
+      attribute :name, :string do
+        public? true
+      end
+    end
+
+    actions do
+      create :create do
+        accept [:name]
+      end
+
+      read :read do
+        primary? true
+      end
+    end
+
+    gen_api do
+      service "disabled_test"
+      code_interface? false
+
+      action :create
+      action :read
+    end
+  end
+
+  defmodule TestDomain do
+    use Ash.Domain
+
+    resources do
+      resource CodeInterfaceDisabledResource
+    end
+  end
+
+  describe "code_interface? false at section level" do
+    test "does not generate code interface functions" do
+      refute function_exported?(CodeInterfaceDisabledResource, :create, 2)
+      refute function_exported?(CodeInterfaceDisabledResource, :create!, 2)
+      refute function_exported?(CodeInterfaceDisabledResource, :read, 2)
+      refute function_exported?(CodeInterfaceDisabledResource, :read!, 2)
+    end
+
+    test "still generates fun_configs" do
+      fun_configs = AshPhoenixGenApi.Resource.Info.fun_configs(CodeInterfaceDisabledResource)
+      assert length(fun_configs) == 2
+    end
+  end
+end
+
+defmodule AshPhoenixGenApi.Resource.CodeInterfaceActionOverrideTest do
+  use ExUnit.Case
+
+  defmodule CodeInterfaceActionOverrideResource do
+    use Ash.Resource,
+      domain: AshPhoenixGenApi.Resource.CodeInterfaceActionOverrideTest.TestDomain,
+      extensions: [AshPhoenixGenApi.Resource],
+      data_layer: Ash.DataLayer.Ets
+
+    attributes do
+      uuid_primary_key :id
+      attribute :name, :string do
+        public? true
+      end
+    end
+
+    actions do
+      create :create do
+        accept [:name]
+      end
+
+      read :read do
+        primary? true
+      end
+
+      update :update do
+        accept [:name]
+      end
+    end
+
+    gen_api do
+      service "action_override_test"
+      code_interface? true
+
+      action :create do
+        code_interface? false
+      end
+
+      action :read
+
+      action :update do
+        code_interface? false
+      end
+    end
+  end
+
+  defmodule TestDomain do
+    use Ash.Domain
+
+    resources do
+      resource CodeInterfaceActionOverrideResource
+    end
+  end
+
+  describe "code_interface? false at action level overrides section level" do
+    test "does not generate code interface for action with code_interface? false" do
+      refute function_exported?(CodeInterfaceActionOverrideResource, :create, 2)
+      refute function_exported?(CodeInterfaceActionOverrideResource, :create!, 2)
+      refute function_exported?(CodeInterfaceActionOverrideResource, :update, 3)
+      refute function_exported?(CodeInterfaceActionOverrideResource, :update!, 3)
+    end
+
+    test "generates code interface for action without override" do
+      assert function_exported?(CodeInterfaceActionOverrideResource, :read, 2)
+      assert function_exported?(CodeInterfaceActionOverrideResource, :read!, 2)
+    end
+
+    test "still generates fun_configs for all enabled actions" do
+      fun_configs = AshPhoenixGenApi.Resource.Info.fun_configs(CodeInterfaceActionOverrideResource)
+      assert length(fun_configs) == 3
+    end
+  end
+end
+
+defmodule AshPhoenixGenApi.Resource.CodeInterfaceActionEnableTest do
+  use ExUnit.Case
+
+  defmodule CodeInterfaceActionEnableResource do
+    use Ash.Resource,
+      domain: AshPhoenixGenApi.Resource.CodeInterfaceActionEnableTest.TestDomain,
+      extensions: [AshPhoenixGenApi.Resource],
+      data_layer: Ash.DataLayer.Ets
+
+    attributes do
+      uuid_primary_key :id
+      attribute :name, :string do
+        public? true
+      end
+    end
+
+    actions do
+      create :create do
+        accept [:name]
+      end
+
+      read :read do
+        primary? true
+      end
+    end
+
+    gen_api do
+      service "action_enable_test"
+      code_interface? false
+
+      action :create do
+        code_interface? true
+      end
+
+      action :read
+    end
+  end
+
+  defmodule TestDomain do
+    use Ash.Domain
+
+    resources do
+      resource CodeInterfaceActionEnableResource
+    end
+  end
+
+  describe "code_interface? true at action level overrides section level false" do
+    test "generates code interface for action with code_interface? true" do
+      assert function_exported?(CodeInterfaceActionEnableResource, :create, 2)
+      assert function_exported?(CodeInterfaceActionEnableResource, :create!, 2)
+    end
+
+    test "does not generate code interface for action inheriting section-level false" do
+      refute function_exported?(CodeInterfaceActionEnableResource, :read, 2)
+      refute function_exported?(CodeInterfaceActionEnableResource, :read!, 2)
+    end
+  end
+end
+
+defmodule AshPhoenixGenApi.Resource.CodeInterfaceInfoTest do
+  use ExUnit.Case
+
+  defmodule InfoTestResource do
+    use Ash.Resource,
+      domain: AshPhoenixGenApi.Resource.CodeInterfaceInfoTest.TestDomain,
+      extensions: [AshPhoenixGenApi.Resource],
+      data_layer: Ash.DataLayer.Ets
+
+    attributes do
+      uuid_primary_key :id
+      attribute :name, :string do
+        public? true
+      end
+    end
+
+    actions do
+      create :create do
+        accept [:name]
+      end
+
+      read :read do
+        primary? true
+      end
+    end
+
+    gen_api do
+      service "info_test"
+      code_interface? true
+
+      action :create do
+        code_interface? false
+      end
+
+      action :read
+    end
+  end
+
+  defmodule TestDomain do
+    use Ash.Domain
+
+    resources do
+      resource InfoTestResource
+    end
+  end
+
+  describe "gen_api_code_interface?/1" do
+    test "returns section-level code_interface? setting" do
+      # Predicate functions (ending with ?) return the value directly, not {:ok, value}
+      assert AshPhoenixGenApi.Resource.Info.gen_api_code_interface?(InfoTestResource) == true
+    end
+  end
+
+  describe "effective_code_interface?/2" do
+    test "returns action-level override when set" do
+      assert AshPhoenixGenApi.Resource.Info.effective_code_interface?(InfoTestResource, :create) == false
+    end
+
+    test "returns section-level default when action-level not set" do
+      assert AshPhoenixGenApi.Resource.Info.effective_code_interface?(InfoTestResource, :read) == true
+    end
+  end
+end
+
+defmodule AshPhoenixGenApi.Resource.ActionConfig.CodeInterfaceTest do
+  use ExUnit.Case
+
+  alias AshPhoenixGenApi.Resource.ActionConfig
+
+  describe "effective_code_interface?/2" do
+    test "returns explicit code_interface? when set to true" do
+      config = %ActionConfig{code_interface?: true}
+      assert ActionConfig.effective_code_interface?(config, false) == true
+    end
+
+    test "returns explicit code_interface? when set to false" do
+      config = %ActionConfig{code_interface?: false}
+      assert ActionConfig.effective_code_interface?(config, true) == false
+    end
+
+    test "returns default when code_interface? is nil" do
+      config = %ActionConfig{code_interface?: nil}
+      assert ActionConfig.effective_code_interface?(config, true) == true
+      assert ActionConfig.effective_code_interface?(config, false) == false
+    end
+  end
+end
+
+defmodule AshPhoenixGenApi.Resource.PermissionCallbackTest do
+  use ExUnit.Case
+
+  alias AshPhoenixGenApi.Resource.ActionConfig
+
+  defmodule TestPermissionChecker do
+    @moduledoc false
+    def check_permission(request_type, args) do
+      case request_type do
+        "admin_action" -> Map.get(args, "role") == "admin"
+        "user_action" -> Map.get(args, "user_id") != nil
+        _ -> true
+      end
+    end
+
+    def deny_all(_request_type, _args), do: false
+    def allow_all(_request_type, _args), do: true
+  end
+
+  defmodule PermissionCallbackResource do
+    use Ash.Resource,
+      domain: AshPhoenixGenApi.Resource.PermissionCallbackTest.TestDomain,
+      extensions: [AshPhoenixGenApi.Resource],
+      data_layer: Ash.DataLayer.Ets
+
+    attributes do
+      uuid_primary_key :id
+      attribute :name, :string do
+        public? true
+      end
+    end
+
+    actions do
+      create :create do
+        accept [:name]
+      end
+
+      read :read do
+        primary? true
+      end
+    end
+
+    gen_api do
+      service "permission_callback_test"
+      permission_callback {TestPermissionChecker, :check_permission, []}
+
+      action :create do
+        request_type "admin_action"
+      end
+
+      action :read do
+        request_type "user_action"
+      end
+    end
+  end
+
+  defmodule TestDomain do
+    use Ash.Domain
+
+    resources do
+      resource PermissionCallbackResource
+    end
+  end
+
+  describe "permission_callback in ActionConfig" do
+    test "effective_permission_callback returns action-level callback" do
+      config = %ActionConfig{permission_callback: {TestPermissionChecker, :deny_all, []}}
+      assert ActionConfig.effective_permission_callback(config, nil) ==
+               {TestPermissionChecker, :deny_all, []}
+    end
+
+    test "effective_permission_callback falls back to section default" do
+      config = %ActionConfig{permission_callback: nil}
+      assert ActionConfig.effective_permission_callback(config, {TestPermissionChecker, :allow_all, []}) ==
+               {TestPermissionChecker, :allow_all, []}
+    end
+
+    test "effective_permission_callback returns nil when both nil" do
+      config = %ActionConfig{permission_callback: nil}
+      assert ActionConfig.effective_permission_callback(config, nil) == nil
+    end
+  end
+
+  describe "permission_callback in FunConfig generation" do
+    test "permission_callback is stored as {:callback, mfa} in FunConfig check_permission" do
+      fun_configs = AshPhoenixGenApi.Resource.Info.fun_configs(PermissionCallbackResource)
+
+      for config <- fun_configs do
+        assert config.check_permission == {:callback, {TestPermissionChecker, :check_permission, []}}
+      end
+    end
+
+    test "action-level permission_callback overrides section-level" do
+      # Test with a resource that has action-level override
+      defmodule ActionOverrideResource do
+        use Ash.Resource,
+          domain: AshPhoenixGenApi.Resource.PermissionCallbackTest.TestDomain2,
+          extensions: [AshPhoenixGenApi.Resource],
+          data_layer: Ash.DataLayer.Ets
+
+        attributes do
+          uuid_primary_key :id
+          attribute :name, :string do
+            public? true
+          end
+        end
+
+        actions do
+          create :create do
+            accept [:name]
+          end
+
+          read :read do
+            primary? true
+          end
+        end
+
+        gen_api do
+          service "action_override_cb_test"
+          permission_callback {TestPermissionChecker, :check_permission, []}
+
+          action :create do
+            permission_callback {TestPermissionChecker, :deny_all, []}
+          end
+
+          action :read
+        end
+      end
+
+      defmodule TestDomain2 do
+        use Ash.Domain
+
+        resources do
+          resource ActionOverrideResource
+        end
+      end
+
+      fun_configs = AshPhoenixGenApi.Resource.Info.fun_configs(ActionOverrideResource)
+      create_config = Enum.find(fun_configs, &(&1.request_type == "create"))
+      read_config = Enum.find(fun_configs, &(&1.request_type == "read"))
+
+      assert create_config.check_permission == {:callback, {TestPermissionChecker, :deny_all, []}}
+      assert read_config.check_permission == {:callback, {TestPermissionChecker, :check_permission, []}}
+    end
+
+    test "check_permission is used when permission_callback is nil" do
+      defmodule NoCallbackResource do
+        use Ash.Resource,
+          domain: AshPhoenixGenApi.Resource.PermissionCallbackTest.TestDomain3,
+          extensions: [AshPhoenixGenApi.Resource],
+          data_layer: Ash.DataLayer.Ets
+
+        attributes do
+          uuid_primary_key :id
+          attribute :name, :string do
+            public? true
+          end
+        end
+
+        actions do
+          create :create do
+            accept [:name]
+          end
+        end
+
+        gen_api do
+          service "no_callback_test"
+          check_permission :any_authenticated
+
+          action :create
+        end
+      end
+
+      defmodule TestDomain3 do
+        use Ash.Domain
+
+        resources do
+          resource NoCallbackResource
+        end
+      end
+
+      fun_configs = AshPhoenixGenApi.Resource.Info.fun_configs(NoCallbackResource)
+      create_config = Enum.find(fun_configs, &(&1.request_type == "create"))
+      assert create_config.check_permission == :any_authenticated
+    end
+  end
+
+  describe "permission_callback introspection" do
+    test "gen_api_permission_callback returns {:ok, section-level setting}" do
+      result = AshPhoenixGenApi.Resource.Info.gen_api_permission_callback(PermissionCallbackResource)
+      assert result == {:ok, {TestPermissionChecker, :check_permission, []}}
+    end
+
+    test "effective_permission_callback resolves correctly" do
+      assert AshPhoenixGenApi.Resource.Info.effective_permission_callback(PermissionCallbackResource, :create) ==
+               {TestPermissionChecker, :check_permission, []}
+    end
+  end
+end
+
+defmodule AshPhoenixGenApi.Domain.PermissionCallbackTest do
+  use ExUnit.Case
+
+  defmodule DomainCallbackChecker do
+    @moduledoc false
+    def check_permission(_request_type, _args), do: true
+  end
+
+  defmodule DomainPermissionCallbackDomain do
+    use Ash.Domain,
+      extensions: [AshPhoenixGenApi.Domain]
+
+    gen_api do
+      service "domain_cb_test"
+      supporter_module AshPhoenixGenApi.Domain.PermissionCallbackTest.Supporter
+      permission_callback {DomainCallbackChecker, :check_permission, []}
+      version "1.0.0"
+    end
+
+    resources do
+    end
+  end
+
+  describe "domain-level permission_callback" do
+    test "gen_api_permission_callback returns {:ok, configured callback}" do
+      result = AshPhoenixGenApi.Domain.Info.gen_api_permission_callback(DomainPermissionCallbackDomain)
+      assert result == {:ok, {DomainCallbackChecker, :check_permission, []}}
+    end
+
+    test "permission_callback helper returns configured callback" do
+      result = AshPhoenixGenApi.Domain.Info.permission_callback(DomainPermissionCallbackDomain)
+      assert result == {DomainCallbackChecker, :check_permission, []}
+    end
+  end
+end
+
+defmodule AshPhoenixGenApi.Domain.PushConfigTest do
+  use ExUnit.Case
+
+  defmodule PushTestDomain do
+    use Ash.Domain,
+      extensions: [AshPhoenixGenApi.Domain]
+
+    gen_api do
+      service "push_test"
+      supporter_module AshPhoenixGenApi.Domain.PushConfigTest.Supporter
+      version "1.0.0"
+      push_nodes [:"gateway1@host", :"gateway2@host"]
+    end
+
+    resources do
+    end
+  end
+
+  defmodule PushMfaDomain do
+    use Ash.Domain,
+      extensions: [AshPhoenixGenApi.Domain]
+
+    gen_api do
+      service "push_mfa_test"
+      supporter_module AshPhoenixGenApi.Domain.PushConfigTest.MfaSupporter
+      version "2.0.0"
+      push_nodes {__MODULE__, :get_nodes, []}
+    end
+
+    resources do
+    end
+
+    def get_nodes, do: [:"mfa_gateway@host"]
+  end
+
+  defmodule NoPushDomain do
+    use Ash.Domain,
+      extensions: [AshPhoenixGenApi.Domain]
+
+    gen_api do
+      service "no_push_test"
+      supporter_module AshPhoenixGenApi.Domain.PushConfigTest.NoPushSupporter
+      version "1.0.0"
+    end
+
+    resources do
+    end
+  end
+
+  describe "push_nodes configuration" do
+    test "gen_api_push_nodes returns {:ok, configured list}" do
+      result = AshPhoenixGenApi.Domain.Info.gen_api_push_nodes(PushTestDomain)
+      assert result == {:ok, [:"gateway1@host", :"gateway2@host"]}
+    end
+
+    test "push_nodes helper returns configured list" do
+      result = AshPhoenixGenApi.Domain.Info.push_nodes(PushTestDomain)
+      assert result == [:"gateway1@host", :"gateway2@host"]
+    end
+
+    test "push_nodes returns nil when not configured" do
+      result = AshPhoenixGenApi.Domain.Info.push_nodes(NoPushDomain)
+      assert result == nil
+    end
+
+    test "push_nodes returns MFA tuple when configured" do
+      result = AshPhoenixGenApi.Domain.Info.push_nodes(PushMfaDomain)
+      assert result == {PushMfaDomain, :get_nodes, []}
+    end
+  end
+
+  describe "push_on_startup configuration" do
+    test "gen_api_push_on_startup returns {:ok, false} by default" do
+      result = AshPhoenixGenApi.Domain.Info.gen_api_push_on_startup(PushTestDomain)
+      assert result == {:ok, false}
+    end
+
+    test "push_on_startup? helper returns false by default" do
+      result = AshPhoenixGenApi.Domain.Info.push_on_startup?(PushTestDomain)
+      assert result == false
+    end
+  end
+
+  describe "generated supporter module push functions" do
+    test "build_push_config/0 returns a PushConfig struct" do
+      alias PhoenixGenApi.Structs.PushConfig
+
+      push_config = AshPhoenixGenApi.Domain.PushConfigTest.Supporter.build_push_config()
+      assert %PushConfig{} = push_config
+      assert push_config.service == "push_test"
+      assert push_config.config_version == "1.0.0"
+      assert push_config.module == AshPhoenixGenApi.Domain.PushConfigTest.Supporter
+      assert push_config.function == :get_config
+      assert push_config.version_module == AshPhoenixGenApi.Domain.PushConfigTest.Supporter
+      assert push_config.version_function == :get_config_version
+    end
+
+    test "build_push_config/0 resolves push_nodes list" do
+      alias PhoenixGenApi.Structs.PushConfig
+
+      push_config = AshPhoenixGenApi.Domain.PushConfigTest.Supporter.build_push_config()
+      assert push_config.nodes == [:"gateway1@host", :"gateway2@host"]
+    end
+
+    test "build_push_config/0 resolves MFA push_nodes at runtime" do
+      alias PhoenixGenApi.Structs.PushConfig
+
+      push_config = AshPhoenixGenApi.Domain.PushConfigTest.MfaSupporter.build_push_config()
+      assert push_config.nodes == [:"mfa_gateway@host"]
+    end
+
+    test "resolve_push_nodes/0 returns configured list" do
+      result = AshPhoenixGenApi.Domain.PushConfigTest.Supporter.resolve_push_nodes()
+      assert result == [:"gateway1@host", :"gateway2@host"]
+    end
+
+    test "resolve_push_nodes/0 resolves MFA at runtime" do
+      result = AshPhoenixGenApi.Domain.PushConfigTest.MfaSupporter.resolve_push_nodes()
+      assert result == [:"mfa_gateway@host"]
+    end
+
+    test "resolve_push_nodes/0 returns nil when not configured" do
+      result = AshPhoenixGenApi.Domain.PushConfigTest.NoPushSupporter.resolve_push_nodes()
+      assert result == nil
+    end
+
+    test "push_to_configured_nodes/1 returns error when no push_nodes" do
+      result = AshPhoenixGenApi.Domain.PushConfigTest.NoPushSupporter.push_to_configured_nodes()
+      assert result == {:error, :no_push_nodes_configured}
+    end
+
+    test "verify_on_gateway/2 is exported" do
+      assert function_exported?(AshPhoenixGenApi.Domain.PushConfigTest.Supporter, :verify_on_gateway, 2)
+    end
+
+    test "push_to_gateway/2 is exported" do
+      assert function_exported?(AshPhoenixGenApi.Domain.PushConfigTest.Supporter, :push_to_gateway, 2)
+    end
+
+    test "push_on_startup/2 is exported" do
+      assert function_exported?(AshPhoenixGenApi.Domain.PushConfigTest.Supporter, :push_on_startup, 2)
+    end
+  end
+
+  describe "domain summary includes push config" do
+    test "summary includes push_nodes" do
+      summary = AshPhoenixGenApi.Domain.Info.summary(PushTestDomain)
+      assert summary.push_nodes == [:"gateway1@host", :"gateway2@host"]
+    end
+
+    test "summary includes push_on_startup" do
+      summary = AshPhoenixGenApi.Domain.Info.summary(PushTestDomain)
+      assert summary.push_on_startup == false
     end
   end
 end

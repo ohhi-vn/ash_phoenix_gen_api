@@ -17,8 +17,10 @@ defmodule AshPhoenixGenApi.Resource.Info do
   - `gen_api_response_type/1` - Returns the default response type
   - `gen_api_request_info/1` - Returns the default request_info setting
   - `gen_api_check_permission/1` - Returns the default permission check mode
+  - `gen_api_permission_callback/1` - Returns the default permission callback MFA
   - `gen_api_version/1` - Returns the default version string
   - `gen_api_retry/1` - Returns the default retry configuration
+  - `gen_api_code_interface?/1` - Returns whether code interface generation is enabled at section level
   - `gen_api/1` - Returns the list of action entities
 
   ## Additional Helpers
@@ -362,6 +364,41 @@ defmodule AshPhoenixGenApi.Resource.Info do
   end
 
   @doc """
+  Gets the effective permission_callback for a specific action, resolving all defaults.
+
+  Resolves the permission_callback in this order:
+  1. Action-level `permission_callback` (if set)
+  2. Section-level `permission_callback` (if set)
+  3. Built-in default of `nil`
+
+  When `permission_callback` is set, it takes precedence over `check_permission`
+  and is stored as `{:callback, mfa}` in the FunConfig's `check_permission` field.
+
+  ## Parameters
+
+    - `resource` - The Ash resource module
+    - `action_name` - The action name atom
+
+  ## Examples
+
+      iex> AshPhoenixGenApi.Resource.Info.effective_permission_callback(MyApp.Chat.DirectMessage, :send_direct_message)
+      nil
+
+      iex> AshPhoenixGenApi.Resource.Info.effective_permission_callback(MyApp.Chat.DirectMessage, :admin_action)
+      {MyApp.Permissions, :check_admin, []}
+  """
+  @spec effective_permission_callback(module(), atom()) :: ActionConfig.permission_callback()
+  def effective_permission_callback(resource, action_name) when is_atom(resource) and is_atom(action_name) do
+    section_default = extract_opt(gen_api_permission_callback(resource), nil)
+    action_config = action(resource, action_name)
+
+    case action_config do
+      nil -> section_default
+      config -> ActionConfig.effective_permission_callback(config, section_default)
+    end
+  end
+
+  @doc """
   Gets the effective choose_node_mode for a specific action, resolving all defaults.
 
   ## Parameters
@@ -434,6 +471,35 @@ defmodule AshPhoenixGenApi.Resource.Info do
     case action_config do
       nil -> section_default
       config -> ActionConfig.effective_retry(config, section_default)
+    end
+  end
+
+  @doc """
+  Gets the effective code_interface? for a specific action, resolving all defaults.
+
+  Resolves the code_interface? setting in this order:
+  1. Action-level `code_interface?` (if set)
+  2. Section-level `code_interface?` (if set)
+  3. Built-in default of `true`
+
+  ## Parameters
+
+    - `resource` - The Ash resource module
+    - `action_name` - The action name atom
+
+  ## Examples
+
+      iex> AshPhoenixGenApi.Resource.Info.effective_code_interface?(MyApp.Chat.DirectMessage, :send_direct_message)
+      true
+  """
+  @spec effective_code_interface?(module(), atom()) :: boolean()
+  def effective_code_interface?(resource, action_name) when is_atom(resource) and is_atom(action_name) do
+    section_default = extract_opt(gen_api_code_interface?(resource), true)
+    action_config = action(resource, action_name)
+
+    case action_config do
+      nil -> section_default
+      config -> ActionConfig.effective_code_interface?(config, section_default)
     end
   end
 

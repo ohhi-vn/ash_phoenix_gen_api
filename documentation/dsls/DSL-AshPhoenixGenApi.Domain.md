@@ -99,6 +99,41 @@ On the Phoenix gateway node, configure the supporter module in `config.exs`:
         }
       ]
 
+## Active Push Configuration
+
+In addition to the pull-based model (where the gateway pulls config from
+service nodes), you can configure the supporter module to **actively push**
+its configuration to gateway nodes.
+
+Set `push_nodes` to specify which gateway nodes to push to:
+
+    gen_api do
+      service "chat"
+      supporter_module MyApp.Chat.GenApiSupporter
+      version "0.0.1"
+      push_nodes [:"gateway1@host", :"gateway2@host"]
+      # Or use an MFA tuple for runtime resolution:
+      # push_nodes {ClusterHelper, :get_gateway_nodes, []}
+    end
+
+This adds the following functions to the generated supporter module:
+
+- `build_push_config/0` - Builds a `PushConfig` struct from the domain config
+- `push_to_gateway/2` - Pushes config to a specific gateway node
+- `push_on_startup/2` - Pushes config on application startup
+- `verify_on_gateway/2` - Verifies config version on a gateway node
+- `resolve_push_nodes/0` - Resolves `push_nodes` at runtime
+- `push_to_configured_nodes/1` - Pushes to all configured push_nodes
+
+Example usage during application startup:
+
+    def start(_type, _args) do
+      # ... start supervision tree, then:
+      MyApp.Chat.GenApiSupporter.push_to_configured_nodes()
+      # Or push to a specific node:
+      MyApp.Chat.GenApiSupporter.push_on_startup(:"gateway1@host")
+    end
+
 
 ## gen_api
 Configure PhoenixGenApi at the domain level.
@@ -153,9 +188,12 @@ end
 | [`response_type`](#gen_api-response_type){: #gen_api-response_type } | `atom` | `:async` | Default response mode for all resources in this domain. - `:sync` - Client waits for the result - `:async` - Client receives an ack, then the result later (default) - `:stream` - Client receives streamed chunks - `:none` - Fire and forget |
 | [`request_info`](#gen_api-request_info){: #gen_api-request_info } | `boolean` | `true` | Default for whether to pass request info (user_id, device_id, request_id) as the last argument to the MFA function for all resources in this domain. |
 | [`check_permission`](#gen_api-check_permission){: #gen_api-check_permission } | `any` | `false` | Default permission check mode for all resources in this domain. - `false` - No permission check (default) - `:any_authenticated` - Requires a valid user_id - `{:arg, "arg_name"}` - The specified argument must match user_id - `{:role, ["admin"]}` - User must have one of the listed roles |
+| [`permission_callback`](#gen_api-permission_callback){: #gen_api-permission_callback } | `any` |  | Default permission callback MFA for all resources in this domain. When set, takes precedence over `check_permission`. Accepts `{Module, :function, []}` or `nil`. The callback function receives `request_type` (string) and `args` (map) as arguments and returns `true` (continue) or `false` (permission denied). The callback function signature:     @callback check_permission(request_type :: String.t(), args :: map()) :: boolean() Example callback:     def check_permission(request_type, args) do       case request_type do         "delete_user" -> args["role"] == "admin"         "update_profile" -> args["user_id"] == args["target_user_id"]         _ -> true       end     end When both `permission_callback` and `check_permission` are set, `permission_callback` takes precedence and is stored as `{:callback, {Module, :function, []}}` in the FunConfig's `check_permission` field. Defaults to `nil`. |
 | [`version`](#gen_api-version){: #gen_api-version } | `String.t` | `"0.0.1"` | Default version string for all resources in this domain. Used for PhoenixGenApi API versioning. |
 | [`retry`](#gen_api-retry){: #gen_api-retry } | `any` |  | Default retry configuration for all resources in this domain. - `nil` - No retry (default) - A positive number `n` - Equivalent to `{:all_nodes, n}` - `{:same_node, n}` - Retry on the same node(s) - `{:all_nodes, n}` - Retry across all available nodes |
 | [`define_supporter?`](#gen_api-define_supporter?){: #gen_api-define_supporter? } | `boolean` | `true` | Whether to auto-generate the supporter module. Set to `false` if you want to define the supporter module manually. When `false`, the extension will still collect FunConfigs from resources but will not generate the supporter module. You can use `AshPhoenixGenApi.Domain.Info.fun_configs/1` to get the aggregated FunConfigs and build your own supporter module. |
+| [`push_nodes`](#gen_api-push_nodes){: #gen_api-push_nodes } | `any` |  | Target gateway nodes to push config to. Can be: - A list of node atoms: `[:"gateway1@host", :"gateway2@host"]` - An MFA tuple that returns a node list at runtime: `{ClusterHelper, :get_gateway_nodes, []}` - `nil` - No push nodes configured (default) When set, the generated supporter module will include functions to actively push its configuration to the specified gateway nodes. |
+| [`push_on_startup`](#gen_api-push_on_startup){: #gen_api-push_on_startup } | `boolean` | `false` | Whether to automatically push config to the configured `push_nodes` on application startup. When `true`, the supporter module's `push_on_startup/2` function can be called during application startup to push the config to gateway nodes. Note: you still need to hook this into your application's supervision tree or startup sequence manually. |
 
 
 

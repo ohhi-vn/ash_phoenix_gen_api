@@ -95,6 +95,41 @@ defmodule AshPhoenixGenApi.Domain do
             args: [:gateway_1]
           }
         ]
+
+  ## Active Push Configuration
+
+  In addition to the pull-based model (where the gateway pulls config from
+  service nodes), you can configure the supporter module to **actively push**
+  its configuration to gateway nodes.
+
+  Set `push_nodes` to specify which gateway nodes to push to:
+
+      gen_api do
+        service "chat"
+        supporter_module MyApp.Chat.GenApiSupporter
+        version "0.0.1"
+        push_nodes [:"gateway1@host", :"gateway2@host"]
+        # Or use an MFA tuple for runtime resolution:
+        # push_nodes {ClusterHelper, :get_gateway_nodes, []}
+      end
+
+  This adds the following functions to the generated supporter module:
+
+  - `build_push_config/0` - Builds a `PushConfig` struct from the domain config
+  - `push_to_gateway/2` - Pushes config to a specific gateway node
+  - `push_on_startup/2` - Pushes config on application startup
+  - `verify_on_gateway/2` - Verifies config version on a gateway node
+  - `resolve_push_nodes/0` - Resolves `push_nodes` at runtime
+  - `push_to_configured_nodes/1` - Pushes to all configured push_nodes
+
+  Example usage during application startup:
+
+      def start(_type, _args) do
+        # ... start supervision tree, then:
+        MyApp.Chat.GenApiSupporter.push_to_configured_nodes()
+        # Or push to a specific node:
+        MyApp.Chat.GenApiSupporter.push_on_startup(:"gateway1@host")
+      end
   """
 
   @gen_api %Spark.Dsl.Section{
@@ -208,6 +243,38 @@ defmodule AshPhoenixGenApi.Domain do
         - `{:role, ["admin"]}` - User must have one of the listed roles
         """
       ],
+      permission_callback: [
+        type: :any,
+        default: nil,
+        doc: """
+        Default permission callback MFA for all resources in this domain. When set,
+        takes precedence over `check_permission`.
+
+        Accepts `{Module, :function, []}` or `nil`. The callback function receives
+        `request_type` (string) and `args` (map) as arguments and returns `true`
+        (continue) or `false` (permission denied).
+
+        The callback function signature:
+
+            @callback check_permission(request_type :: String.t(), args :: map()) :: boolean()
+
+        Example callback:
+
+            def check_permission(request_type, args) do
+              case request_type do
+                "delete_user" -> args["role"] == "admin"
+                "update_profile" -> args["user_id"] == args["target_user_id"]
+                _ -> true
+              end
+            end
+
+        When both `permission_callback` and `check_permission` are set,
+        `permission_callback` takes precedence and is stored as
+        `{:callback, {Module, :function, []}}` in the FunConfig's `check_permission` field.
+
+        Defaults to `nil`.
+        """
+      ],
       version: [
         type: :string,
         default: "0.0.1",
@@ -255,6 +322,34 @@ defmodule AshPhoenixGenApi.Domain do
         but will not generate the supporter module. You can use
         `AshPhoenixGenApi.Domain.Info.fun_configs/1` to get the aggregated
         FunConfigs and build your own supporter module.
+        """
+      ],
+      push_nodes: [
+        type: :any,
+        default: nil,
+        doc: """
+        Target gateway nodes to push config to.
+
+        Can be:
+        - A list of node atoms: `[:"gateway1@host", :"gateway2@host"]`
+        - An MFA tuple that returns a node list at runtime: `{ClusterHelper, :get_gateway_nodes, []}`
+        - `nil` - No push nodes configured (default)
+
+        When set, the generated supporter module will include functions to
+        actively push its configuration to the specified gateway nodes.
+        """
+      ],
+      push_on_startup: [
+        type: :boolean,
+        default: false,
+        doc: """
+        Whether to automatically push config to the configured `push_nodes`
+        on application startup.
+
+        When `true`, the supporter module's `push_on_startup/2` function can
+        be called during application startup to push the config to gateway nodes.
+        Note: you still need to hook this into your application's supervision
+        tree or startup sequence manually.
         """
       ]
     ]

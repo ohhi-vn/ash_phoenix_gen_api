@@ -11,10 +11,13 @@ An Ash Framework extension for generating [PhoenixGenApi](https://github.com/ohh
 - **DSL-driven API configuration** — Define PhoenixGenApi endpoints alongside your Ash resource definitions
 - **Automatic type mapping** — Ash types are automatically converted to PhoenixGenApi argument types
 - **Auto-derived arguments** — Action arguments and accepted attributes are automatically extracted from Ash actions
+- **Auto-generated code interface** — Elixir functions are generated on the resource module for each gen_api action (create, read, update, destroy, generic)
 - **Domain-level aggregation** — Auto-generates a "supporter" module that aggregates FunConfigs from all resources
+- **Active push configuration** — Push API configs to gateway nodes on startup, with MFA-based runtime node resolution
+- **Permission callback** — Custom MFA callback for permission checking, receives `(request_type, args)` and returns `true`/`false`
 - **Compile-time verification** — Validates action existence, request type uniqueness, and argument consistency
 - **Resolution hierarchy** — Configuration values cascade from action → resource → domain → built-in defaults
-- **PhoenixGenApi client interface** — Generated supporter modules implement `get_config/1`, `get_config_version/1`, `fun_configs/0`, etc.
+- **PhoenixGenApi client interface** — Generated supporter modules implement `get_config/1`, `get_config_version/1`, `fun_configs/0`, `push_to_gateway/2`, etc.
 
 ## Installation
 
@@ -198,8 +201,10 @@ The `gen_api` section is added to Ash resources when using `AshPhoenixGenApi.Res
 | `response_type` | `:sync \| :async \| :stream \| :none` | `:async` | Default response mode |
 | `request_info` | `:boolean` | `true` | Default for passing request info |
 | `check_permission` | `false \| :any_authenticated \| {:arg, string} \| {:role, [string]}` | `false` | Default permission check mode |
+| `permission_callback` | `{module, atom, list} \| nil` | `nil` | Default permission callback MFA. Callback receives `(request_type, args)` and returns `true`/`false`. Takes precedence over `check_permission` |
 | `version` | `:string` | `"0.0.1"` | Default version string |
 | `retry` | `pos_integer \| {:same_node, pos_integer} \| {:all_nodes, pos_integer}` | `nil` | Default retry configuration |
+| `code_interface?` | `:boolean` | `true` | Whether to auto-generate code interface functions for gen_api actions |
 
 #### Action Entity Options
 
@@ -211,6 +216,7 @@ The `gen_api` section is added to Ash resources when using `AshPhoenixGenApi.Res
 | `response_type` | `:sync \| :async \| :stream \| :none` | section default | Response mode |
 | `request_info` | `:boolean` | section default | Whether to pass request info |
 | `check_permission` | see above | section default | Permission check mode |
+| `permission_callback` | `{module, atom, list} \| nil` | section default | Permission callback MFA. Overrides `check_permission` when set |
 | `choose_node_mode` | see above | section default | Node selection strategy |
 | `nodes` | see above | section default | Target nodes |
 | `retry` | see above | section default | Retry configuration |
@@ -219,6 +225,7 @@ The `gen_api` section is added to Ash resources when using `AshPhoenixGenApi.Res
 | `arg_types` | `map \| nil` | auto-derived | Explicit argument types |
 | `arg_orders` | `[string] \| nil` | auto-derived | Explicit argument order |
 | `disabled` | `:boolean` | `false` | Disable this endpoint |
+| `code_interface?` | `:boolean \| nil` | `nil` | Whether to generate code interface for this action. `nil` inherits from section-level |
 
 ### Domain DSL (`gen_api`)
 
@@ -235,10 +242,13 @@ The `gen_api` section is added to Ash domains when using `AshPhoenixGenApi.Domai
 | `response_type` | see above | `:async` | Default response mode |
 | `request_info` | `:boolean` | `true` | Default for passing request info |
 | `check_permission` | see above | `false` | Default permission check mode |
+| `permission_callback` | `{module, atom, list} \| nil` | `nil` | Default permission callback MFA. Callback receives `(request_type, args)` and returns `true`/`false`. Takes precedence over `check_permission` |
 | `version` | `:string` | `"0.0.1"` | Default version string |
 | `retry` | see above | `nil` | Default retry configuration |
 | `supporter_module` | `:atom` | **required** | Module name for auto-generated supporter |
 | `define_supporter?` | `:boolean` | `true` | Whether to auto-generate the supporter module |
+| `push_nodes` | `[atom] \| {module, atom, list} \| :local \| nil` | `nil` | Target gateway nodes to push config to |
+| `push_on_startup` | `:boolean` | `false` | Whether to push config on application startup |
 
 ## Type Mapping
 
@@ -431,6 +441,118 @@ The extension performs compile-time verification to catch configuration errors e
 - **Supporter module name** — Must be a valid Elixir module name
 - **Service configuration** — Resources with gen_api must have a service configured (either on the resource or the domain)
 - **Request type uniqueness across resources** — No two resources in the domain may expose the same `request_type`
+
+## Code Interface
+
+When `code_interface?` is `true` (the default), the extension auto-generates Elixir functions on the resource module for each gen_api action. This allows you to call actions directly without building queries or changesets manually.
+
+```elixir
+# Create action — auto-generates create/2 and create!/2
+{:ok, message} = MyApp.Chat.DirectMessage.create(%{content: "Hello"})
+message = MyApp.Chat.DirectMessage.create!(%{content: "Hello"})
+
+# Read action — auto-generates read/2 and read!/2
+{:ok, messages} = MyApp.Chat.DirectMessage.read()
+messages = MyApp.Chat.DirectMessage.read!()
+
+# Update action — auto-generates update/3 and update!/3 (requires record)
+{:ok, updated} = MyApp.Chat.DirectMessage.update(message, %{content: "Updated"})
+updated = MyApp.Chat.DirectMessage.update!(message, %{content: "Updated"})
+
+# Destroy action — auto-generates destroy/3 and destroy!/3 (requires record)
+:ok = MyApp.Chat.DirectMessage.destroy(message)
+:ok = MyApp.Chat.DirectMessage.destroy!(message)
+
+# Generic action — auto-generates action_name/2 and action_name!/2
+{:ok, result} = MyApp.Chat.DirectMessage.greet(%{name: "World"})
+```
+
+You can disable code interface generation at the section level or per-action:
+
+```elixir
+gen_api do
+  service "chat"
+  code_interface? false  # Disable for all actions
+
+  action :create do
+    code_interface? true  # Re-enable for this action only
+  end
+
+  action :read  # Inherits section-level false
+end
+```
+
+## Permission Callback
+
+In addition to the built-in permission modes (`false`, `:any_authenticated`, `{:arg, "arg_name"}`, `{:role, ["admin"]}`), you can specify a custom callback function for permission checking using `permission_callback`.
+
+The callback receives `request_type` (string) and `args` (map) as arguments and returns `true` (continue) or `false` (permission denied).
+
+```elixir
+defmodule MyApp.Permissions do
+  def check_permission(request_type, args) do
+    case request_type do
+      "delete_user" -> args["role"] == "admin"
+      "update_profile" -> args["user_id"] == args["target_user_id"]
+      _ -> true
+    end
+  end
+end
+
+# In your resource:
+gen_api do
+  service "chat"
+  permission_callback {MyApp.Permissions, :check_permission, []}
+
+  action :delete_user do
+    # Uses the section-level permission_callback
+  end
+
+  action :admin_action do
+    # Override with a different callback
+    permission_callback {MyApp.Permissions, :check_admin, []}
+  end
+end
+```
+
+When `permission_callback` is set, it takes precedence over `check_permission` and is stored as `{:callback, {Module, :function, []}}` in the FunConfig's `check_permission` field.
+
+## Active Push Configuration
+
+In addition to the pull-based model (where the gateway pulls config from service nodes), you can configure the supporter module to **actively push** its configuration to gateway nodes.
+
+```elixir
+gen_api do
+  service "chat"
+  supporter_module MyApp.Chat.GenApiSupporter
+  version "0.0.1"
+  push_nodes [:"gateway1@host", :"gateway2@host"]
+  # Or use an MFA tuple for runtime resolution:
+  # push_nodes {ClusterHelper, :get_gateway_nodes, []}
+end
+```
+
+Then push config during application startup:
+
+```elixir
+def start(_type, _args) do
+  # ... start supervision tree, then:
+  MyApp.Chat.GenApiSupporter.push_to_configured_nodes()
+  # Or push to a specific node:
+  MyApp.Chat.GenApiSupporter.push_on_startup(:"gateway1@host")
+end
+```
+
+The generated supporter module includes these push functions:
+
+| Function | Description |
+|----------|-------------|
+| `build_push_config/0` | Builds a `PushConfig` struct from the domain config |
+| `push_to_gateway/2` | Pushes config to a specific gateway node |
+| `push_on_startup/2` | Pushes config on application startup |
+| `verify_on_gateway/2` | Verifies config version on a gateway node |
+| `resolve_push_nodes/0` | Resolves `push_nodes` at runtime (handles MFA tuples) |
+| `push_to_configured_nodes/1` | Pushes to all configured push_nodes |
 
 ## Example: Chat Service
 

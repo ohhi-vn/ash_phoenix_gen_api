@@ -25,6 +25,16 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyDomainConfig do
      `true`, warns if the supporter module already exists (which could indicate
      a conflict with a manually-defined module).
 
+  6. **Push nodes configuration** — When `push_nodes` is configured, validates
+     that it is either a list of atom node names, an MFA tuple
+     `{module, function, args}`, `:local`, or `nil`. Lists must contain only
+     atoms, and MFA tuples must have the correct structure.
+
+  7. **Permission callback configuration** — When `permission_callback` is
+     configured, validates that it is either a valid MFA tuple
+     `{module, function, args}` or `nil`. MFA tuples must have the correct
+     structure (module and function must be atoms, args must be a list).
+
   ## Error Messages
 
   The verifier raises `Spark.Error.DslError` with descriptive messages
@@ -51,6 +61,8 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyDomainConfig do
 
       with :ok <- verify_supporter_module(domain, supporter_module),
            :ok <- verify_service_config(dsl_state, domain, define_supporter?),
+           :ok <- verify_push_nodes(dsl_state, domain),
+           :ok <- verify_permission_callback(dsl_state, domain),
            :ok <- verify_resource_services(dsl_state, domain),
            :ok <- verify_request_type_uniqueness(dsl_state, domain) do
         :ok
@@ -118,6 +130,170 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyDomainConfig do
   end
 
   defp valid_module_name?(_), do: false
+
+  # ---------------------------------------------------------------------------
+  # Push nodes verification
+  # ---------------------------------------------------------------------------
+
+  defp verify_push_nodes(dsl_state, domain) do
+    push_nodes = extract_opt(Info.gen_api_push_nodes(dsl_state), nil)
+
+    case push_nodes do
+      nil ->
+        :ok
+
+      :local ->
+        :ok
+
+      nodes when is_list(nodes) ->
+        invalid_elements =
+          nodes
+          |> Enum.with_index()
+          |> Enum.filter(fn {elem, _idx} -> not is_atom(elem) end)
+          |> Enum.map(fn {elem, idx} ->
+            "  Element at index #{idx}: #{inspect(elem)} (expected an atom)"
+          end)
+
+        if invalid_elements == [] do
+          :ok
+        else
+          raise Spark.Error.DslError,
+            module: domain,
+            path: [:gen_api, :push_nodes],
+            message: """
+            All elements in push_nodes list must be atoms (node names).
+
+            Invalid elements:
+            #{Enum.join(invalid_elements, "\n")}
+
+            Example: push_nodes [:"gateway1@host", :"gateway2@host"]
+            """
+        end
+
+      {mod, fun, args} when is_atom(mod) and is_atom(fun) and is_list(args) ->
+        :ok
+
+      {mod, fun, args} ->
+        errors = []
+
+        errors =
+          if not is_atom(mod) do
+            errors ++ ["  Module must be an atom, got: #{inspect(mod)}"]
+          else
+            errors
+          end
+
+        errors =
+          if not is_atom(fun) do
+            errors ++ ["  Function must be an atom, got: #{inspect(fun)}"]
+          else
+            errors
+          end
+
+        errors =
+          if not is_list(args) do
+            errors ++ ["  Args must be a list, got: #{inspect(args)}"]
+          else
+            errors
+          end
+
+        raise Spark.Error.DslError,
+          module: domain,
+          path: [:gen_api, :push_nodes],
+          message: """
+          Invalid MFA tuple for push_nodes.
+
+          Errors:
+          #{Enum.join(errors, "\n")}
+
+          Expected format: {Module, :function, [arg1, arg2, ...]}
+          Example: push_nodes {ClusterHelper, :get_gateway_nodes, []}
+          """
+
+      other ->
+        raise Spark.Error.DslError,
+          module: domain,
+          path: [:gen_api, :push_nodes],
+          message: """
+          Invalid push_nodes configuration.
+
+          Got: #{inspect(other)}
+
+          push_nodes must be one of:
+          - A list of node atoms: [:"gateway1@host", :"gateway2@host"]
+          - An MFA tuple: {ClusterHelper, :get_gateway_nodes, []}
+          - `:local` for the local node
+          - `nil` for no push nodes (default)
+          """
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Permission callback verification
+  # ---------------------------------------------------------------------------
+
+  defp verify_permission_callback(dsl_state, domain) do
+    permission_callback = extract_opt(Info.gen_api_permission_callback(dsl_state), nil)
+
+    case permission_callback do
+      nil ->
+        :ok
+
+      {mod, fun, args} when is_atom(mod) and is_atom(fun) and is_list(args) ->
+        :ok
+
+      {mod, fun, args} ->
+        errors = []
+
+        errors =
+          if not is_atom(mod) do
+            errors ++ ["  Module must be an atom, got: #{inspect(mod)}"]
+          else
+            errors
+          end
+
+        errors =
+          if not is_atom(fun) do
+            errors ++ ["  Function must be an atom, got: #{inspect(fun)}"]
+          else
+            errors
+          end
+
+        errors =
+          if not is_list(args) do
+            errors ++ ["  Args must be a list, got: #{inspect(args)}"]
+          else
+            errors
+          end
+
+        raise Spark.Error.DslError,
+          module: domain,
+          path: [:gen_api, :permission_callback],
+          message: """
+          Invalid MFA tuple for permission_callback.
+
+          Errors:
+          #{Enum.join(errors, "\n")}
+
+          Expected format: {Module, :function, [arg1, arg2, ...]}
+          Example: permission_callback {MyApp.Permissions, :check, []}
+          """
+
+      other ->
+        raise Spark.Error.DslError,
+          module: domain,
+          path: [:gen_api, :permission_callback],
+          message: """
+          Invalid permission_callback configuration.
+
+          Got: #{inspect(other)}
+
+          permission_callback must be one of:
+          - An MFA tuple: {Module, :function, []}
+          - `nil` for no callback (default)
+          """
+    end
+  end
 
   # ---------------------------------------------------------------------------
   # Service configuration verification

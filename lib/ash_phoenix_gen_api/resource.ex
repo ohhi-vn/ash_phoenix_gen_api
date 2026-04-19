@@ -134,6 +134,39 @@ defmodule AshPhoenixGenApi.Resource do
         Defaults to the `gen_api` section-level `check_permission` (which defaults to `false`).
         """
       ],
+      permission_callback: [
+        type: :any,
+        default: nil,
+        doc: """
+        A custom callback MFA for permission checking. When set, takes precedence
+        over `check_permission`.
+
+        Accepts `{Module, :function, []}` or `nil`. The callback function receives
+        `request_type` (string) and `args` (map) as arguments and returns `true`
+        (continue) or `false` (permission denied).
+
+        The callback function signature:
+
+            @callback check_permission(request_type :: String.t(), args :: map()) :: boolean()
+
+        Example callback:
+
+            def check_permission(request_type, args) do
+              case request_type do
+                "delete_user" -> args["role"] == "admin"
+                "update_profile" -> args["user_id"] == args["target_user_id"]
+                _ -> true
+              end
+            end
+
+        When `nil`, inherits from the section-level `permission_callback`.
+        When both `permission_callback` and `check_permission` are set,
+        `permission_callback` takes precedence and is stored as
+        `{:callback, {Module, :function, []}}` in the FunConfig's `check_permission` field.
+
+        Defaults to the `gen_api` section-level `permission_callback` (which defaults to `nil`).
+        """
+      ],
       choose_node_mode: [
         type: :any,
         doc: """
@@ -219,6 +252,19 @@ defmodule AshPhoenixGenApi.Resource do
         When `true`, this endpoint is disabled and will not be included in
         the generated FunConfig list. Useful for temporarily disabling an
         endpoint without removing its configuration.
+        """
+      ],
+      code_interface?: [
+        type: {:or, [:boolean, :nil]},
+        default: nil,
+        doc: """
+        Whether to generate a code interface function for this specific action.
+        When `true`, a function matching the action name will be defined on the
+        resource module that calls the action through the Ash framework.
+
+        When `nil` (the default), inherits from the section-level `code_interface?` setting.
+        Set to `false` to disable code interface generation for this action
+        while keeping it enabled for others.
         """
       ]
     ]
@@ -345,6 +391,38 @@ defmodule AshPhoenixGenApi.Resource do
         - `{:role, ["admin"]}` - User must have one of the listed roles
         """
       ],
+      permission_callback: [
+        type: :any,
+        default: nil,
+        doc: """
+        Default permission callback MFA for all actions. When set, takes precedence
+        over `check_permission`.
+
+        Accepts `{Module, :function, []}` or `nil`. The callback function receives
+        `request_type` (string) and `args` (map) as arguments and returns `true`
+        (continue) or `false` (permission denied).
+
+        The callback function signature:
+
+            @callback check_permission(request_type :: String.t(), args :: map()) :: boolean()
+
+        Example callback:
+
+            def check_permission(request_type, args) do
+              case request_type do
+                "delete_user" -> args["role"] == "admin"
+                "update_profile" -> args["user_id"] == args["target_user_id"]
+                _ -> true
+              end
+            end
+
+        When both `permission_callback` and `check_permission` are set,
+        `permission_callback` takes precedence and is stored as
+        `{:callback, {Module, :function, []}}` in the FunConfig's `check_permission` field.
+
+        Defaults to `nil`.
+        """
+      ],
       version: [
         type: :string,
         default: "0.0.1",
@@ -362,6 +440,20 @@ defmodule AshPhoenixGenApi.Resource do
         - A positive number `n` - Equivalent to `{:all_nodes, n}`
         - `{:same_node, n}` - Retry on the same node(s)
         - `{:all_nodes, n}` - Retry across all available nodes
+        """
+      ],
+      code_interface?: [
+        type: :boolean,
+        default: true,
+        doc: """
+        Whether to auto-generate code interface functions for the gen_api actions
+        on the resource module. When `true`, a function matching each action name
+        will be defined on the resource module that calls the action through the
+        Ash framework.
+
+        Individual actions can override this with their own `code_interface?` option.
+
+        Defaults to `true`.
         """
       ]
     ],

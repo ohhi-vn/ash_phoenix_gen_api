@@ -120,6 +120,18 @@ defmodule AshPhoenixGenApi do
       MyApp.Chat.GenApiSupporter.list_request_types()
       #=> ["send_direct_message", "get_conversation", ...]
 
+      # Push config to a gateway node (active push)
+      MyApp.Chat.GenApiSupporter.push_to_gateway(:"gateway1@host")
+      #=> {:ok, :accepted}
+
+      # Push config on application startup
+      MyApp.Chat.GenApiSupporter.push_on_startup(:"gateway1@host")
+      #=> {:ok, :accepted}
+
+      # Push to all configured push_nodes
+      MyApp.Chat.GenApiSupporter.push_to_configured_nodes()
+      #=> {:ok, [{:"gateway1@host", {:ok, :accepted}}, ...]}
+
   ### 3. Configure the gateway node
 
   On the Phoenix gateway node, configure `phoenix_gen_api` in `config.exs`:
@@ -134,6 +146,113 @@ defmodule AshPhoenixGenApi do
             args: [:gateway_1]
           }
         ]
+
+  ## Code Interface
+
+  When `code_interface?` is `true` (the default), the extension auto-generates
+  Elixir functions on the resource module for each gen_api action. This allows
+  you to call actions directly without building queries or changesets manually.
+
+      # Create action — auto-generates create/2 and create!/2
+      {:ok, message} = MyApp.Chat.DirectMessage.create(%{content: "Hello"})
+      message = MyApp.Chat.DirectMessage.create!(%{content: "Hello"})
+
+      # Read action — auto-generates read/2 and read!/2
+      {:ok, messages} = MyApp.Chat.DirectMessage.read()
+      messages = MyApp.Chat.DirectMessage.read!()
+
+      # Update action — auto-generates update/3 and update!/3 (requires record)
+      {:ok, updated} = MyApp.Chat.DirectMessage.update(message, %{content: "Updated"})
+      updated = MyApp.Chat.DirectMessage.update!(message, %{content: "Updated"})
+
+      # Destroy action — auto-generates destroy/3 and destroy!/3 (requires record)
+      :ok = MyApp.Chat.DirectMessage.destroy(message)
+      :ok = MyApp.Chat.DirectMessage.destroy!(message)
+
+      # Generic action — auto-generates action_name/2 and action_name!/2
+      {:ok, result} = MyApp.Chat.DirectMessage.greet(%{name: "World"})
+
+  You can disable code interface generation at the section level or per-action:
+
+      gen_api do
+        service "chat"
+        code_interface? false  # Disable for all actions
+
+        action :create do
+          code_interface? true  # Re-enable for this action only
+        end
+
+        action :read  # Inherits section-level false
+      end
+
+  ## Permission Callback
+
+  In addition to the built-in permission modes (`false`, `:any_authenticated`,
+  `{:arg, "arg_name"}`, `{:role, ["admin"]}`), you can specify a custom
+  callback function for permission checking using `permission_callback`.
+
+  The callback receives `request_type` (string) and `args` (map) as arguments
+  and returns `true` (continue) or `false` (permission denied).
+
+      defmodule MyApp.Permissions do
+        def check_permission(request_type, args) do
+          case request_type do
+            "delete_user" -> args["role"] == "admin"
+            "update_profile" -> args["user_id"] == args["target_user_id"]
+            _ -> true
+          end
+        end
+      end
+
+      gen_api do
+        service "chat"
+        permission_callback {MyApp.Permissions, :check_permission, []}
+
+        action :delete_user do
+          # Uses the section-level permission_callback
+        end
+
+        action :admin_action do
+          # Override with a different callback
+          permission_callback {MyApp.Permissions, :check_admin, []}
+        end
+      end
+
+  When `permission_callback` is set, it takes precedence over `check_permission`
+  and is stored as `{:callback, {Module, :function, []}}` in the FunConfig's
+  `check_permission` field.
+
+  ## Active Push Configuration
+
+  In addition to the pull-based model (where the gateway pulls config from
+  service nodes), you can configure the supporter module to **actively push**
+  its configuration to gateway nodes.
+
+      gen_api do
+        service "chat"
+        supporter_module MyApp.Chat.GenApiSupporter
+        version "0.0.1"
+        push_nodes [:"gateway1@host", :"gateway2@host"]
+        # Or use an MFA tuple for runtime resolution:
+        # push_nodes {ClusterHelper, :get_gateway_nodes, []}
+      end
+
+  Then push config during application startup:
+
+      def start(_type, _args) do
+        # ... start supervision tree, then:
+        MyApp.Chat.GenApiSupporter.push_to_configured_nodes()
+        # Or push to a specific node:
+        MyApp.Chat.GenApiSupporter.push_on_startup(:"gateway1@host")
+      end
+
+  The generated supporter module includes these push functions:
+  - `build_push_config/0` - Builds a `PushConfig` struct from the domain config
+  - `push_to_gateway/2` - Pushes config to a specific gateway node
+  - `push_on_startup/2` - Pushes config on application startup
+  - `verify_on_gateway/2` - Verifies config version on a gateway node
+  - `resolve_push_nodes/0` - Resolves `push_nodes` at runtime
+  - `push_to_configured_nodes/1` - Pushes to all configured push_nodes
 
   ## Type Mapping
 
@@ -236,10 +355,14 @@ defmodule AshPhoenixGenApi do
   - `response_type` — `:async`
   - `request_info` — `true`
   - `check_permission` — `false`
+  - `permission_callback` — `nil` (no custom callback)
   - `choose_node_mode` — `:random`
   - `nodes` — `:local`
   - `version` — `"0.0.1"`
   - `retry` — `nil` (no retry)
+  - `code_interface?` — `true` (auto-generate code interface functions)
+  - `push_nodes` — `nil` (no push nodes)
+  - `push_on_startup` — `false`
   """
   @spec defaults() :: map()
   def defaults do
@@ -248,10 +371,14 @@ defmodule AshPhoenixGenApi do
       response_type: :async,
       request_info: true,
       check_permission: false,
+      permission_callback: nil,
       choose_node_mode: :random,
       nodes: :local,
       version: "0.0.1",
-      retry: nil
+      retry: nil,
+      code_interface?: true,
+      push_nodes: nil,
+      push_on_startup: false
     }
   end
 
