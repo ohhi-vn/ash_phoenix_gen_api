@@ -619,10 +619,38 @@ defmodule AshPhoenixGenApi.Domain.Info do
       total_fun_configs: length(fun_configs(domain)),
       push_nodes: push_nodes(domain),
       push_on_startup: push_on_startup?(domain),
+      result_encoder: result_encoder(domain),
       resources: resources
     }
   rescue
     _ -> %{}
+  end
+
+  @doc """
+  Gets the default result_encoder for this domain.
+
+  The `result_encoder` determines how the result returned from the action
+  MFA call is encoded before being returned to the caller:
+
+  - `:struct` — Return the Ash resource struct as-is (default)
+  - `:map` — Convert the Ash resource struct to a map using `Map.from_struct/1`
+  - `{Module, :function, args}` — Custom encoder MFA
+
+  ## Parameters
+
+    - `domain` - The Ash domain module
+
+  ## Examples
+
+      iex> AshPhoenixGenApi.Domain.Info.result_encoder(MyApp.Chat)
+      :struct
+
+      iex> AshPhoenixGenApi.Domain.Info.result_encoder(MyApp.Chat)
+      :map
+  """
+  @spec result_encoder(module()) :: :struct | :map | {module(), atom(), [any()]} | nil
+  def result_encoder(domain) when is_atom(domain) do
+    extract_opt(gen_api_result_encoder(domain), :struct)
   end
 
   # ---------------------------------------------------------------------------

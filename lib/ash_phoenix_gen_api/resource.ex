@@ -266,6 +266,29 @@ defmodule AshPhoenixGenApi.Resource do
         Set to `false` to disable code interface generation for this action
         while keeping it enabled for others.
         """
+      ],
+      result_encoder: [
+        type: :any,
+        default: nil,
+        doc: """
+        How to encode the result returned from the action MFA call.
+
+        - `:struct` — Return the Ash resource struct as-is (default behavior)
+        - `:map` — Convert the Ash resource struct to a map using `Map.from_struct/1`
+        - `{Module, :function, args}` — Custom encoder MFA. The function receives
+          the result as its first argument, followed by `args`, and must return
+          the encoded result.
+
+        When `nil` (the default), inherits from the section-level `result_encoder` setting.
+
+        The encoding is applied in the generated code interface functions.
+        For `:map` encoding, single structs are converted with `Map.from_struct/1`,
+        and lists of structs are mapped with `Enum.map(&Map.from_struct/1)`.
+        For custom MFA encoders, the function receives the result and must return
+        the encoded value.
+
+        Defaults to the `gen_api` section-level `result_encoder` (which defaults to `:struct`).
+        """
       ]
     ]
   }
@@ -454,6 +477,31 @@ defmodule AshPhoenixGenApi.Resource do
         Individual actions can override this with their own `code_interface?` option.
 
         Defaults to `true`.
+        """
+      ],
+      result_encoder: [
+        type: :any,
+        default: :struct,
+        doc: """
+        Default result encoding mode for all actions.
+
+        Determines how the result returned from the action MFA call is encoded
+        before being returned to the caller.
+
+        - `:struct` — Return the Ash resource struct as-is (default)
+        - `:map` — Convert the Ash resource struct to a map using `Map.from_struct/1`
+        - `{Module, :function, args}` — Custom encoder MFA. The function receives
+          the result as its first argument, followed by `args`, and must return
+          the encoded result.
+
+        Individual actions can override this with their own `result_encoder` option.
+
+        For `:map` encoding, single structs are converted with `Map.from_struct/1`,
+        and lists of structs are mapped with `Enum.map(&Map.from_struct/1)`.
+        For custom MFA encoders, the function receives the result and must return
+        the encoded value.
+
+        Defaults to `:struct`.
         """
       ]
     ],

@@ -24,6 +24,7 @@ defmodule AshPhoenixGenApi.Resource.ActionConfig do
   - `arg_orders` - Explicit argument order list (overrides auto-derived)
   - `disabled` - Whether this endpoint is disabled
   - `code_interface?` - Whether to generate a code interface function for this action
+  - `result_encoder` - How to encode the result returned from the action MFA call
 
   ## Resolution Order
 
@@ -91,6 +92,12 @@ defmodule AshPhoenixGenApi.Resource.ActionConfig do
           | {:list_string, pos_integer(), pos_integer()}
           | {:list_num, pos_integer()}
 
+  @type result_encoder ::
+          :struct
+          | :map
+          | {module(), atom(), [any()]}
+          | nil
+
   @type t :: %__MODULE__{
           name: atom(),
           request_type: String.t() | nil,
@@ -108,6 +115,7 @@ defmodule AshPhoenixGenApi.Resource.ActionConfig do
           arg_orders: [String.t()] | nil,
           disabled: boolean(),
           code_interface?: boolean() | nil,
+          result_encoder: result_encoder(),
           __spark_metadata__: any()
         }
 
@@ -128,6 +136,7 @@ defmodule AshPhoenixGenApi.Resource.ActionConfig do
     :arg_orders,
     disabled: false,
     code_interface?: nil,
+    result_encoder: nil,
     __spark_metadata__: nil
   ]
 
@@ -309,4 +318,37 @@ defmodule AshPhoenixGenApi.Resource.ActionConfig do
   @spec effective_code_interface?(t(), boolean()) :: boolean()
   def effective_code_interface?(%__MODULE__{code_interface?: nil}, default), do: default
   def effective_code_interface?(%__MODULE__{code_interface?: code_interface?}, _default), do: code_interface?
+
+  @doc """
+  Resolves the effective result_encoder setting, falling back to the provided default.
+
+  The `result_encoder` determines how the result from the action MFA call is encoded:
+
+  - `:struct` — Return the Ash resource struct as-is (default behavior)
+  - `:map` — Convert the Ash resource struct to a map using `Map.from_struct/1`
+  - `{Module, :function, args}` — Custom encoder MFA. The function receives
+    the result as its first argument, followed by `args`, and must return
+    the encoded result.
+  - `nil` — Inherit from the section-level default
+
+  When the action-level `result_encoder` is explicitly set (not `nil`), returns that value.
+  Otherwise, returns the section-level default.
+
+  ## Examples
+
+      iex> config = %AshPhoenixGenApi.Resource.ActionConfig{result_encoder: :map}
+      iex> AshPhoenixGenApi.Resource.ActionConfig.effective_result_encoder(config, :struct)
+      :map
+
+      iex> config = %AshPhoenixGenApi.Resource.ActionConfig{result_encoder: nil}
+      iex> AshPhoenixGenApi.Resource.ActionConfig.effective_result_encoder(config, :struct)
+      :struct
+
+      iex> config = %AshPhoenixGenApi.Resource.ActionConfig{result_encoder: {MyEncoder, :encode, []}}
+      iex> AshPhoenixGenApi.Resource.ActionConfig.effective_result_encoder(config, :struct)
+      {MyEncoder, :encode, []}
+  """
+  @spec effective_result_encoder(t(), result_encoder()) :: result_encoder()
+  def effective_result_encoder(%__MODULE__{result_encoder: nil}, default), do: default
+  def effective_result_encoder(%__MODULE__{result_encoder: result_encoder}, _default), do: result_encoder
 end

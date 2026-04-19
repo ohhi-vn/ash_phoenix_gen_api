@@ -254,6 +254,91 @@ defmodule AshPhoenixGenApi do
   - `resolve_push_nodes/0` - Resolves `push_nodes` at runtime
   - `push_to_configured_nodes/1` - Pushes to all configured push_nodes
 
+  ## Result Encoder
+
+  By default, the auto-generated code interface functions return Ash resource
+  structs as-is. You can configure `result_encoder` to transform the result
+  before returning it to the caller.
+
+  ### Encoder Modes
+
+  - `:struct` — Return the Ash resource struct as-is (default)
+  - `:map` — Convert the Ash resource struct to a map using `Map.from_struct/1`
+  - `{Module, :function, args}` — Custom encoder MFA. The function receives
+    the result as its first argument, followed by `args`, and must return
+    the encoded result.
+
+  ### Configuration
+
+  `result_encoder` can be set at the domain, resource section, or action level:
+
+      # Domain-level default
+      gen_api do
+        service "chat"
+        result_encoder :map
+        supporter_module MyApp.Chat.GenApiSupporter
+      end
+
+      # Resource-level default
+      gen_api do
+        service "chat"
+        result_encoder :map
+
+        action :create
+        action :read
+      end
+
+      # Action-level override
+      gen_api do
+        service "chat"
+        result_encoder :struct
+
+        action :create do
+          result_encoder :map  # Override section-level default
+        end
+
+        action :read  # Inherits section-level :struct
+      end
+
+      # Custom encoder MFA
+      gen_api do
+        service "chat"
+        result_encoder {MyApp.Encoder, :to_api_format, []}
+
+        action :create
+      end
+
+  ### Encoding Behavior
+
+  For `:map` encoding:
+  - Single structs are converted with `Map.from_struct/1` (removes `__struct__`
+    and metadata keys like `__meta__`)
+  - Lists of structs are mapped with `Enum.map(&Map.from_struct/1)`
+  - The atom `:ok` (from destroy actions) is returned as-is
+  - Non-struct values (e.g., generic action results) are returned as-is
+
+  For custom MFA encoders:
+  - The function receives the raw result value as its first argument
+  - For read actions, the value is a list of structs
+  - For create/update actions, the value is a single struct
+  - For destroy actions, the value is `:ok`
+  - The function must return the encoded value
+
+  ### Important Note
+
+  When using `:map` or custom encoding, the bang (!) functions return encoded
+  values. Since update and destroy actions require a struct as their first
+  argument, you cannot chain encoded results directly. Use the non-bang
+  versions or create records directly via Ash if you need to chain operations:
+
+      # This works — create returns struct, update accepts struct
+      {:ok, record} = MyResource.create(%{name: "test"})
+      {:ok, updated} = MyResource.update(record, %{name: "updated"})
+
+      # This does NOT work — create! returns map, update requires struct
+      record = MyResource.create!(%{name: "test"})  # Returns map with :map encoder
+      MyResource.update(record, %{name: "updated"}) # Error: record must be a struct
+
   ## Type Mapping
 
   Ash types are automatically mapped to PhoenixGenApi argument types:
@@ -285,6 +370,7 @@ defmodule AshPhoenixGenApi do
   - `AshPhoenixGenApi.Domain.Info` — Domain introspection helpers
   - `AshPhoenixGenApi.TypeMapper` — Ash type to PhoenixGenApi type mapping
   - `AshPhoenixGenApi.JsonConfig` — JSON function config list generation utilities
+  - `AshPhoenixGenApi.Codec` — Result encoding for Ash resource structs
   - `AshPhoenixGenApi.Transformers.DefineFunConfigs` — Resource transformer
   - `AshPhoenixGenApi.Transformers.DefineDomainSupporter` — Domain transformer
   - `AshPhoenixGenApi.Verifiers.VerifyActionConfigs` — Resource verifier
@@ -320,6 +406,7 @@ defmodule AshPhoenixGenApi do
       AshPhoenixGenApi.Domain.Info,
       AshPhoenixGenApi.TypeMapper,
       AshPhoenixGenApi.JsonConfig,
+      AshPhoenixGenApi.Codec,
       AshPhoenixGenApi.Transformers.DefineFunConfigs,
       AshPhoenixGenApi.Transformers.DefineDomainSupporter,
       AshPhoenixGenApi.Verifiers.VerifyActionConfigs,
@@ -365,6 +452,7 @@ defmodule AshPhoenixGenApi do
   - `code_interface?` — `true` (auto-generate code interface functions)
   - `push_nodes` — `nil` (no push nodes)
   - `push_on_startup` — `false`
+  - `result_encoder` — `:struct` (return Ash resource struct as-is)
   """
   @spec defaults() :: map()
   def defaults do
@@ -380,7 +468,8 @@ defmodule AshPhoenixGenApi do
       retry: nil,
       code_interface?: true,
       push_nodes: nil,
-      push_on_startup: false
+      push_on_startup: false,
+      result_encoder: :struct
     }
   end
 

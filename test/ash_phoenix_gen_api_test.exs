@@ -1934,3 +1934,687 @@ defmodule AshPhoenixGenApi.Domain.PushConfigTest do
     end
   end
 end
+
+defmodule AshPhoenixGenApi.CodecTest do
+  use ExUnit.Case
+
+  describe "encode_result/2 with :struct encoder" do
+    test "returns {:ok, struct} unchanged" do
+      struct = %{__struct__: FakeResource, id: "1", name: "test"}
+      assert AshPhoenixGenApi.Codec.encode_result({:ok, struct}, :struct) == {:ok, struct}
+    end
+
+    test "returns {:error, error} unchanged" do
+      assert AshPhoenixGenApi.Codec.encode_result({:error, :not_found}, :struct) == {:error, :not_found}
+    end
+
+    test "returns :ok unchanged for destroy actions" do
+      assert AshPhoenixGenApi.Codec.encode_result(:ok, :struct) == :ok
+    end
+  end
+
+  describe "encode_result/2 with :map encoder" do
+    test "converts {:ok, struct} to {:ok, map}" do
+      struct = %{__struct__: FakeResource, id: "1", name: "test"}
+      {:ok, result} = AshPhoenixGenApi.Codec.encode_result({:ok, struct}, :map)
+      assert is_map(result)
+      refute Map.has_key?(result, :__struct__)
+      assert result.id == "1"
+      assert result.name == "test"
+    end
+
+    test "converts {:ok, list of structs} to {:ok, list of maps}" do
+      structs = [
+        %{__struct__: FakeResource, id: "1", name: "a"},
+        %{__struct__: FakeResource, id: "2", name: "b"}
+      ]
+      {:ok, results} = AshPhoenixGenApi.Codec.encode_result({:ok, structs}, :map)
+      assert is_list(results)
+      assert length(results) == 2
+      Enum.each(results, fn r ->
+        assert is_map(r)
+        refute Map.has_key?(r, :__struct__)
+      end)
+    end
+
+    test "returns {:error, error} unchanged" do
+      assert AshPhoenixGenApi.Codec.encode_result({:error, :not_found}, :map) == {:error, :not_found}
+    end
+
+    test "returns :ok unchanged for destroy actions" do
+      assert AshPhoenixGenApi.Codec.encode_result(:ok, :map) == :ok
+    end
+
+    test "passes through non-struct values in {:ok, value}" do
+      assert AshPhoenixGenApi.Codec.encode_result({:ok, "hello"}, :map) == {:ok, "hello"}
+      assert AshPhoenixGenApi.Codec.encode_result({:ok, 42}, :map) == {:ok, 42}
+    end
+  end
+
+  describe "encode_result/2 with custom MFA encoder" do
+    test "applies custom encoder to {:ok, value}" do
+      encoder = {__MODULE__, :upcase_name, []}
+      struct = %{__struct__: FakeResource, id: "1", name: "test"}
+      {:ok, result} = AshPhoenixGenApi.Codec.encode_result({:ok, struct}, encoder)
+      assert result.name == "TEST"
+    end
+
+    test "returns {:error, error} unchanged with custom encoder" do
+      encoder = {__MODULE__, :upcase_name, []}
+      assert AshPhoenixGenApi.Codec.encode_result({:error, :not_found}, encoder) == {:error, :not_found}
+    end
+  end
+
+  describe "encode_value/2 with :struct encoder" do
+    test "returns value unchanged" do
+      struct = %{__struct__: FakeResource, id: "1", name: "test"}
+      assert AshPhoenixGenApi.Codec.encode_value(struct, :struct) == struct
+    end
+  end
+
+  describe "encode_value/2 with :map encoder" do
+    test "converts single struct to map" do
+      struct = %{__struct__: FakeResource, id: "1", name: "test"}
+      result = AshPhoenixGenApi.Codec.encode_value(struct, :map)
+      assert is_map(result)
+      refute Map.has_key?(result, :__struct__)
+      assert result.id == "1"
+      assert result.name == "test"
+    end
+
+    test "converts list of structs to list of maps" do
+      structs = [
+        %{__struct__: FakeResource, id: "1", name: "a"},
+        %{__struct__: FakeResource, id: "2", name: "b"}
+      ]
+      results = AshPhoenixGenApi.Codec.encode_value(structs, :map)
+      assert is_list(results)
+      assert length(results) == 2
+      Enum.each(results, fn r ->
+        assert is_map(r)
+        refute Map.has_key?(r, :__struct__)
+      end)
+    end
+
+    test "returns :ok unchanged" do
+      assert AshPhoenixGenApi.Codec.encode_value(:ok, :map) == :ok
+    end
+
+    test "passes through non-struct values" do
+      assert AshPhoenixGenApi.Codec.encode_value("hello", :map) == "hello"
+      assert AshPhoenixGenApi.Codec.encode_value(42, :map) == 42
+    end
+  end
+
+  describe "encode_value/2 with custom MFA encoder" do
+    test "applies custom encoder to value" do
+      encoder = {__MODULE__, :upcase_name, []}
+      struct = %{__struct__: FakeResource, id: "1", name: "test"}
+      result = AshPhoenixGenApi.Codec.encode_value(struct, encoder)
+      assert result.name == "TEST"
+    end
+
+    test "passes extra args to custom encoder" do
+      encoder = {__MODULE__, :prefix_name, ["mr_"]}
+      struct = %{__struct__: FakeResource, id: "1", name: "test"}
+      result = AshPhoenixGenApi.Codec.encode_value(struct, encoder)
+      assert result.name == "mr_test"
+    end
+  end
+
+  describe "encode_value/2 fallback" do
+    test "returns value unchanged for nil encoder" do
+      struct = %{__struct__: FakeResource, id: "1", name: "test"}
+      assert AshPhoenixGenApi.Codec.encode_value(struct, nil) == struct
+    end
+
+    test "returns value unchanged for unrecognized encoder" do
+      struct = %{__struct__: FakeResource, id: "1", name: "test"}
+      assert AshPhoenixGenApi.Codec.encode_value(struct, :unknown) == struct
+    end
+  end
+
+  # Test helper functions for custom encoders
+  def upcase_name(value) do
+    %{value | name: String.upcase(value.name)}
+  end
+
+  def prefix_name(value, prefix) do
+    %{value | name: prefix <> value.name}
+  end
+end
+
+defmodule AshPhoenixGenApi.Resource.ActionConfig.ResultEncoderTest do
+  use ExUnit.Case
+
+  alias AshPhoenixGenApi.Resource.ActionConfig
+
+  describe "effective_result_encoder/2" do
+    test "returns explicit result_encoder when set to :map" do
+      config = %ActionConfig{result_encoder: :map}
+      assert ActionConfig.effective_result_encoder(config, :struct) == :map
+    end
+
+    test "returns explicit result_encoder when set to :struct" do
+      config = %ActionConfig{result_encoder: :struct}
+      assert ActionConfig.effective_result_encoder(config, :map) == :struct
+    end
+
+    test "returns explicit result_encoder when set to custom MFA" do
+      mfa = {MyEncoder, :encode, []}
+      config = %ActionConfig{result_encoder: mfa}
+      assert ActionConfig.effective_result_encoder(config, :struct) == mfa
+    end
+
+    test "returns default when result_encoder is nil" do
+      config = %ActionConfig{result_encoder: nil}
+      assert ActionConfig.effective_result_encoder(config, :struct) == :struct
+      assert ActionConfig.effective_result_encoder(config, :map) == :map
+    end
+  end
+end
+
+defmodule AshPhoenixGenApi.Resource.ResultEncoderTest do
+  use ExUnit.Case
+
+  alias AshPhoenixGenApi.Resource.Info
+
+  defmodule StructDefaultResource do
+    use Ash.Resource,
+      domain: AshPhoenixGenApi.Resource.ResultEncoderTest.TestDomain,
+      extensions: [AshPhoenixGenApi.Resource],
+      data_layer: Ash.DataLayer.Ets
+
+    attributes do
+      uuid_primary_key :id
+      attribute :name, :string do
+        public? true
+      end
+    end
+
+    actions do
+      create :create do
+        accept [:name]
+      end
+
+      read :read do
+        primary? true
+      end
+    end
+
+    gen_api do
+      service "result_encoder_test"
+      result_encoder :struct
+
+      action :create
+      action :read
+    end
+  end
+
+  defmodule MapDefaultResource do
+    use Ash.Resource,
+      domain: AshPhoenixGenApi.Resource.ResultEncoderTest.TestDomain,
+      extensions: [AshPhoenixGenApi.Resource],
+      data_layer: Ash.DataLayer.Ets
+
+    attributes do
+      uuid_primary_key :id
+      attribute :name, :string do
+        public? true
+      end
+    end
+
+    actions do
+      create :create do
+        accept [:name]
+      end
+
+      read :read do
+        primary? true
+      end
+    end
+
+    gen_api do
+      service "result_encoder_test"
+      result_encoder :map
+
+      action :create
+      action :read
+    end
+  end
+
+  defmodule ActionOverrideResource do
+    use Ash.Resource,
+      domain: AshPhoenixGenApi.Resource.ResultEncoderTest.TestDomain,
+      extensions: [AshPhoenixGenApi.Resource],
+      data_layer: Ash.DataLayer.Ets
+
+    attributes do
+      uuid_primary_key :id
+      attribute :name, :string do
+        public? true
+      end
+    end
+
+    actions do
+      create :create do
+        accept [:name]
+      end
+
+      read :read do
+        primary? true
+      end
+
+      update :update do
+        accept [:name]
+      end
+
+      destroy :destroy
+    end
+
+    gen_api do
+      service "result_encoder_test"
+      result_encoder :struct
+
+      action :create do
+        result_encoder :map
+      end
+
+      action :read
+      action :update do
+        result_encoder :map
+      end
+      action :destroy
+    end
+  end
+
+  defmodule TestDomain do
+    use Ash.Domain
+
+    resources do
+      resource StructDefaultResource
+      resource MapDefaultResource
+      resource ActionOverrideResource
+    end
+  end
+
+  describe "result_encoder DSL option" do
+    test "gen_api_result_encoder returns {:ok, :struct} for struct default resource" do
+      assert {:ok, :struct} = Info.gen_api_result_encoder(StructDefaultResource)
+    end
+
+    test "gen_api_result_encoder returns {:ok, :map} for map default resource" do
+      assert {:ok, :map} = Info.gen_api_result_encoder(MapDefaultResource)
+    end
+
+    test "gen_api_result_encoder returns {:ok, :struct} for action override resource" do
+      assert {:ok, :struct} = Info.gen_api_result_encoder(ActionOverrideResource)
+    end
+  end
+
+  describe "effective_result_encoder/2" do
+    test "returns section-level default :struct for struct default resource" do
+      assert Info.effective_result_encoder(StructDefaultResource, :create) == :struct
+    end
+
+    test "returns section-level default :map for map default resource" do
+      assert Info.effective_result_encoder(MapDefaultResource, :create) == :map
+    end
+
+    test "returns action-level :map override for action override resource create" do
+      assert Info.effective_result_encoder(ActionOverrideResource, :create) == :map
+    end
+
+    test "returns section-level :struct for action override resource read" do
+      assert Info.effective_result_encoder(ActionOverrideResource, :read) == :struct
+    end
+
+    test "returns action-level :map override for action override resource update" do
+      assert Info.effective_result_encoder(ActionOverrideResource, :update) == :map
+    end
+
+    test "returns section-level :struct for action override resource destroy" do
+      assert Info.effective_result_encoder(ActionOverrideResource, :destroy) == :struct
+    end
+  end
+
+  describe "code interface with result_encoder :struct (default)" do
+    test "create returns struct" do
+      assert {:ok, record} = StructDefaultResource.create(%{name: "struct_test"})
+      assert %StructDefaultResource{} = record
+      assert record.name == "struct_test"
+    end
+
+    test "create! returns struct" do
+      record = StructDefaultResource.create!(%{name: "struct_test2"})
+      assert %StructDefaultResource{} = record
+    end
+
+    test "read returns list of structs" do
+      StructDefaultResource.create!(%{name: "read_struct"})
+      assert {:ok, records} = StructDefaultResource.read()
+      assert is_list(records)
+      Enum.each(records, fn r -> assert %StructDefaultResource{} = r end)
+    end
+
+    test "read! returns list of structs" do
+      records = StructDefaultResource.read!()
+      assert is_list(records)
+    end
+  end
+
+  describe "code interface with result_encoder :map" do
+    test "create returns map" do
+      assert {:ok, result} = MapDefaultResource.create(%{name: "map_test"})
+      assert is_map(result)
+      refute Map.has_key?(result, :__struct__)
+      assert result.name == "map_test"
+    end
+
+    test "create! returns map" do
+      result = MapDefaultResource.create!(%{name: "map_test2"})
+      assert is_map(result)
+      refute Map.has_key?(result, :__struct__)
+    end
+
+    test "read returns list of maps" do
+      MapDefaultResource.create!(%{name: "read_map"})
+      assert {:ok, results} = MapDefaultResource.read()
+      assert is_list(results)
+      Enum.each(results, fn r ->
+        assert is_map(r)
+        refute Map.has_key?(r, :__struct__)
+      end)
+    end
+
+    test "read! returns list of maps" do
+      results = MapDefaultResource.read!()
+      assert is_list(results)
+      Enum.each(results, fn r ->
+        assert is_map(r)
+        refute Map.has_key?(r, :__struct__)
+      end)
+    end
+  end
+
+  describe "code interface with action-level result_encoder override" do
+    test "create with :map override returns map" do
+      assert {:ok, result} = ActionOverrideResource.create(%{name: "override_test"})
+      assert is_map(result)
+      refute Map.has_key?(result, :__struct__)
+      assert result.name == "override_test"
+    end
+
+    test "create! with :map override returns map" do
+      result = ActionOverrideResource.create!(%{name: "override_test2"})
+      assert is_map(result)
+      refute Map.has_key?(result, :__struct__)
+    end
+
+    test "read with :struct default returns struct" do
+      assert {:ok, records} = ActionOverrideResource.read()
+      assert is_list(records)
+      Enum.each(records, fn r -> assert %ActionOverrideResource{} = r end)
+    end
+
+    test "update with :map override returns map" do
+      # Create record directly via Ash to get a struct (create! returns a map
+      # due to result_encoder: :map, but update requires a struct as first arg)
+      record =
+        Ash.Changeset.for_create(ActionOverrideResource, :create, %{name: "to_update"})
+        |> Ash.create!()
+
+      assert {:ok, result} = ActionOverrideResource.update(record, %{name: "updated"})
+      assert is_map(result)
+      refute Map.has_key?(result, :__struct__)
+      assert result.name == "updated"
+    end
+
+    test "update! with :map override returns map" do
+      # Create record directly via Ash to get a struct (create! returns a map
+      # due to result_encoder: :map, but update requires a struct as first arg)
+      record =
+        Ash.Changeset.for_create(ActionOverrideResource, :create, %{name: "to_update2"})
+        |> Ash.create!()
+
+      result = ActionOverrideResource.update!(record, %{name: "updated2"})
+      assert is_map(result)
+      refute Map.has_key?(result, :__struct__)
+    end
+
+    test "destroy with :struct default returns :ok" do
+      # Create record directly via Ash to get a struct (create! returns a map
+      # due to result_encoder: :map, but destroy requires a struct as first arg)
+      record =
+        Ash.Changeset.for_create(ActionOverrideResource, :create, %{name: "to_delete"})
+        |> Ash.create!()
+
+      assert :ok = ActionOverrideResource.destroy(record)
+    end
+
+    test "destroy! with :struct default returns :ok" do
+      # Create record directly via Ash to get a struct (create! returns a map
+      # due to result_encoder: :map, but destroy requires a struct as first arg)
+      record =
+        Ash.Changeset.for_create(ActionOverrideResource, :create, %{name: "to_delete2"})
+        |> Ash.create!()
+
+      assert :ok = ActionOverrideResource.destroy!(record)
+    end
+  end
+end
+
+defmodule AshPhoenixGenApi.Resource.ResultEncoderCustomMfaTest do
+  use ExUnit.Case
+
+  defmodule MyEncoder do
+    def to_json(value) when is_list(value) do
+      Enum.map(value, &to_json/1)
+    end
+
+    def to_json(%{__struct__: _} = value) do
+      value
+      |> Map.from_struct()
+      |> Map.put(:encoded_by, :my_encoder)
+    end
+
+    def to_json(value) do
+      value
+    end
+
+    def add_timestamp(value, suffix) do
+      value
+      |> Map.from_struct()
+      |> Map.put(:suffix, suffix)
+    end
+  end
+
+  defmodule CustomMfaResource do
+    use Ash.Resource,
+      domain: AshPhoenixGenApi.Resource.ResultEncoderCustomMfaTest.TestDomain,
+      extensions: [AshPhoenixGenApi.Resource],
+      data_layer: Ash.DataLayer.Ets
+
+    attributes do
+      uuid_primary_key :id
+      attribute :name, :string do
+        public? true
+      end
+    end
+
+    actions do
+      create :create do
+        accept [:name]
+      end
+
+      read :read do
+        primary? true
+      end
+    end
+
+    gen_api do
+      service "custom_mfa_test"
+      result_encoder {AshPhoenixGenApi.Resource.ResultEncoderCustomMfaTest.MyEncoder, :to_json, []}
+
+      action :create
+      action :read
+    end
+  end
+
+  defmodule TestDomain do
+    use Ash.Domain
+
+    resources do
+      resource CustomMfaResource
+    end
+  end
+
+  describe "code interface with custom MFA result_encoder" do
+    test "create applies custom encoder" do
+      assert {:ok, result} = CustomMfaResource.create(%{name: "custom_test"})
+      assert is_map(result)
+      refute Map.has_key?(result, :__struct__)
+      assert result.name == "custom_test"
+      assert result.encoded_by == :my_encoder
+    end
+
+    test "create! applies custom encoder" do
+      result = CustomMfaResource.create!(%{name: "custom_test2"})
+      assert is_map(result)
+      assert result.encoded_by == :my_encoder
+    end
+
+    test "read applies custom encoder to each item" do
+      CustomMfaResource.create!(%{name: "read_custom"})
+      assert {:ok, results} = CustomMfaResource.read()
+      assert is_list(results)
+      Enum.each(results, fn r ->
+        assert is_map(r)
+        assert r.encoded_by == :my_encoder
+      end)
+    end
+
+    test "read! applies custom encoder to each item" do
+      results = CustomMfaResource.read!()
+      assert is_list(results)
+      Enum.each(results, fn r ->
+        assert is_map(r)
+        assert r.encoded_by == :my_encoder
+      end)
+    end
+  end
+end
+
+defmodule AshPhoenixGenApi.Domain.ResultEncoderTest do
+  use ExUnit.Case
+
+  alias AshPhoenixGenApi.Domain.Info
+
+  defmodule StructEncoderDomain do
+    use Ash.Domain,
+      extensions: [AshPhoenixGenApi.Domain]
+
+    gen_api do
+      service "struct_encoder_domain"
+      supporter_module AshPhoenixGenApi.Domain.ResultEncoderTest.StructSupporter
+      result_encoder :struct
+    end
+
+    resources do
+    end
+  end
+
+  defmodule MapEncoderDomain do
+    use Ash.Domain,
+      extensions: [AshPhoenixGenApi.Domain]
+
+    gen_api do
+      service "map_encoder_domain"
+      supporter_module AshPhoenixGenApi.Domain.ResultEncoderTest.MapSupporter
+      result_encoder :map
+    end
+
+    resources do
+    end
+  end
+
+  defmodule CustomMfaEncoderDomain do
+    use Ash.Domain,
+      extensions: [AshPhoenixGenApi.Domain]
+
+    gen_api do
+      service "custom_mfa_encoder_domain"
+      supporter_module AshPhoenixGenApi.Domain.ResultEncoderTest.CustomMfaSupporter
+      result_encoder {MyEncoder, :encode, []}
+    end
+
+    resources do
+    end
+  end
+
+  defmodule DefaultEncoderDomain do
+    use Ash.Domain,
+      extensions: [AshPhoenixGenApi.Domain]
+
+    gen_api do
+      service "default_encoder_domain"
+      supporter_module AshPhoenixGenApi.Domain.ResultEncoderTest.DefaultSupporter
+    end
+
+    resources do
+    end
+  end
+
+  describe "domain result_encoder configuration" do
+    test "gen_api_result_encoder returns {:ok, :struct} for struct encoder domain" do
+      assert {:ok, :struct} = Info.gen_api_result_encoder(StructEncoderDomain)
+    end
+
+    test "gen_api_result_encoder returns {:ok, :map} for map encoder domain" do
+      assert {:ok, :map} = Info.gen_api_result_encoder(MapEncoderDomain)
+    end
+
+    test "gen_api_result_encoder returns {:ok, mfa} for custom MFA encoder domain" do
+      assert {:ok, {MyEncoder, :encode, []}} = Info.gen_api_result_encoder(CustomMfaEncoderDomain)
+    end
+
+    test "gen_api_result_encoder returns {:ok, :struct} by default" do
+      assert {:ok, :struct} = Info.gen_api_result_encoder(DefaultEncoderDomain)
+    end
+  end
+
+  describe "result_encoder/1 helper" do
+    test "returns :struct for struct encoder domain" do
+      assert Info.result_encoder(StructEncoderDomain) == :struct
+    end
+
+    test "returns :map for map encoder domain" do
+      assert Info.result_encoder(MapEncoderDomain) == :map
+    end
+
+    test "returns custom MFA for custom MFA encoder domain" do
+      assert Info.result_encoder(CustomMfaEncoderDomain) == {MyEncoder, :encode, []}
+    end
+
+    test "returns :struct by default" do
+      assert Info.result_encoder(DefaultEncoderDomain) == :struct
+    end
+  end
+
+  describe "domain summary includes result_encoder" do
+    test "summary includes result_encoder :struct" do
+      summary = Info.summary(StructEncoderDomain)
+      assert summary.result_encoder == :struct
+    end
+
+    test "summary includes result_encoder :map" do
+      summary = Info.summary(MapEncoderDomain)
+      assert summary.result_encoder == :map
+    end
+
+    test "summary includes result_encoder custom MFA" do
+      summary = Info.summary(CustomMfaEncoderDomain)
+      assert summary.result_encoder == {MyEncoder, :encode, []}
+    end
+  end
+end

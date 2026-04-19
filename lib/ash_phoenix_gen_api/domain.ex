@@ -351,6 +351,32 @@ defmodule AshPhoenixGenApi.Domain do
         Note: you still need to hook this into your application's supervision
         tree or startup sequence manually.
         """
+      ],
+      result_encoder: [
+        type: :any,
+        default: :struct,
+        doc: """
+        Default result encoding mode for all resources in this domain.
+
+        Determines how the result returned from the action MFA call is encoded
+        before being returned to the caller.
+
+        - `:struct` — Return the Ash resource struct as-is (default)
+        - `:map` — Convert the Ash resource struct to a map using `Map.from_struct/1`
+        - `{Module, :function, args}` — Custom encoder MFA. The function receives
+          the result as its first argument, followed by `args`, and must return
+          the encoded result.
+
+        Individual resources and actions can override this with their own
+        `result_encoder` option.
+
+        For `:map` encoding, single structs are converted with `Map.from_struct/1`,
+        and lists of structs are mapped with `Enum.map(&Map.from_struct/1)`.
+        For custom MFA encoders, the function receives the result and must return
+        the encoded value.
+
+        Defaults to `:struct`.
+        """
       ]
     ]
   }

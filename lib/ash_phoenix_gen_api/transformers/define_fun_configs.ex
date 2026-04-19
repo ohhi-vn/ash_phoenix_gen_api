@@ -193,7 +193,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
           ActionConfig.effective_code_interface?(action_config, section_code_interface?)
         end)
         |> Enum.flat_map(fn action_config ->
-          build_code_interface_functions(action_config, dsl_state)
+          build_code_interface_functions(action_config, dsl_state, section_defaults)
         end)
 
       dsl_state =
@@ -229,7 +229,8 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
       check_permission: extract_opt(Info.gen_api_check_permission(dsl_state), false),
       permission_callback: extract_opt(Info.gen_api_permission_callback(dsl_state), nil),
       version: extract_opt(Info.gen_api_version(dsl_state), "0.0.1"),
-      retry: extract_opt(Info.gen_api_retry(dsl_state), nil)
+      retry: extract_opt(Info.gen_api_retry(dsl_state), nil),
+      result_encoder: extract_opt(Info.gen_api_result_encoder(dsl_state), :struct)
     }
   end
 
@@ -388,7 +389,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
   #   - :action  → def name(params_or_opts \\ [], opts \\ [])
   #
   # Returns an empty list if the action cannot be found in the resource.
-  defp build_code_interface_functions(action_config, dsl_state) do
+  defp build_code_interface_functions(action_config, dsl_state, section_defaults) do
     action_name = action_config.name
     ash_action = Ash.Resource.Info.action(dsl_state, action_name)
 
@@ -397,27 +398,28 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
     else
       action_type = ash_action.type
       bang_name = String.to_atom("#{action_name}!")
+      result_encoder = ActionConfig.effective_result_encoder(action_config, section_defaults.result_encoder)
 
       case action_type do
         :create ->
-          build_create_interface(action_name, bang_name, action_type)
+          build_create_interface(action_name, bang_name, action_type, result_encoder)
 
         :read ->
-          build_read_interface(action_name, bang_name, action_type)
+          build_read_interface(action_name, bang_name, action_type, result_encoder)
 
         :update ->
-          build_update_interface(action_name, bang_name, action_type)
+          build_update_interface(action_name, bang_name, action_type, result_encoder)
 
         :destroy ->
-          build_destroy_interface(action_name, bang_name, action_type)
+          build_destroy_interface(action_name, bang_name, action_type, result_encoder)
 
         :action ->
-          build_generic_interface(action_name, bang_name, action_type)
+          build_generic_interface(action_name, bang_name, action_type, result_encoder)
       end
     end
   end
 
-  defp build_create_interface(action_name, bang_name, action_type) do
+  defp build_create_interface(action_name, bang_name, action_type, result_encoder) do
     doc_string =
       "Auto-generated code interface for the `:#{action_name}` gen_api action (#{action_type}).\n\n" <>
         "Calls `Ash.Changeset.for_create/4` then `Ash.create/2`.\n\n" <>
@@ -437,6 +439,8 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
       "Auto-generated code interface for the `:#{action_name}` gen_api action (#{action_type}).\n\n" <>
         "Same as `#{action_name}/2` but raises on error."
 
+    result_encoder_escaped = Macro.escape(result_encoder)
+
     [
       quote do
         @doc unquote(doc_string)
@@ -444,6 +448,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
           {args, opts} = Ash.CodeInterface.params_and_opts(params_or_opts, opts)
           Ash.Changeset.for_create(__MODULE__, unquote(action_name), args, opts)
           |> Ash.create(opts)
+          |> AshPhoenixGenApi.Codec.encode_result(unquote(result_encoder_escaped))
         end
       end,
       quote do
@@ -452,12 +457,13 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
           {args, opts} = Ash.CodeInterface.params_and_opts(params_or_opts, opts)
           Ash.Changeset.for_create(__MODULE__, unquote(action_name), args, opts)
           |> Ash.create!(opts)
+          |> AshPhoenixGenApi.Codec.encode_value(unquote(result_encoder_escaped))
         end
       end
     ]
   end
 
-  defp build_read_interface(action_name, bang_name, action_type) do
+  defp build_read_interface(action_name, bang_name, action_type, result_encoder) do
     doc_string =
       "Auto-generated code interface for the `:#{action_name}` gen_api action (#{action_type}).\n\n" <>
         "Calls `Ash.Query.for_read/4` then `Ash.read/2`.\n\n" <>
@@ -477,6 +483,8 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
       "Auto-generated code interface for the `:#{action_name}` gen_api action (#{action_type}).\n\n" <>
         "Same as `#{action_name}/2` but raises on error."
 
+    result_encoder_escaped = Macro.escape(result_encoder)
+
     [
       quote do
         @doc unquote(doc_string)
@@ -484,6 +492,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
           {args, opts} = Ash.CodeInterface.params_and_opts(params_or_opts, opts)
           Ash.Query.for_read(__MODULE__, unquote(action_name), args, opts)
           |> Ash.read(opts)
+          |> AshPhoenixGenApi.Codec.encode_result(unquote(result_encoder_escaped))
         end
       end,
       quote do
@@ -492,12 +501,13 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
           {args, opts} = Ash.CodeInterface.params_and_opts(params_or_opts, opts)
           Ash.Query.for_read(__MODULE__, unquote(action_name), args, opts)
           |> Ash.read!(opts)
+          |> AshPhoenixGenApi.Codec.encode_value(unquote(result_encoder_escaped))
         end
       end
     ]
   end
 
-  defp build_update_interface(action_name, bang_name, action_type) do
+  defp build_update_interface(action_name, bang_name, action_type, result_encoder) do
     doc_string =
       "Auto-generated code interface for the `:#{action_name}` gen_api action (#{action_type}).\n\n" <>
         "Calls `Ash.Changeset.for_update/4` then `Ash.update/2`.\n\n" <>
@@ -518,6 +528,8 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
       "Auto-generated code interface for the `:#{action_name}` gen_api action (#{action_type}).\n\n" <>
         "Same as `#{action_name}/3` but raises on error."
 
+    result_encoder_escaped = Macro.escape(result_encoder)
+
     [
       quote do
         @doc unquote(doc_string)
@@ -525,6 +537,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
           {args, opts} = Ash.CodeInterface.params_and_opts(params_or_opts, opts)
           Ash.Changeset.for_update(record, unquote(action_name), args, opts)
           |> Ash.update(opts)
+          |> AshPhoenixGenApi.Codec.encode_result(unquote(result_encoder_escaped))
         end
       end,
       quote do
@@ -533,12 +546,13 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
           {args, opts} = Ash.CodeInterface.params_and_opts(params_or_opts, opts)
           Ash.Changeset.for_update(record, unquote(action_name), args, opts)
           |> Ash.update!(opts)
+          |> AshPhoenixGenApi.Codec.encode_value(unquote(result_encoder_escaped))
         end
       end
     ]
   end
 
-  defp build_destroy_interface(action_name, bang_name, action_type) do
+  defp build_destroy_interface(action_name, bang_name, action_type, result_encoder) do
     doc_string =
       "Auto-generated code interface for the `:#{action_name}` gen_api action (#{action_type}).\n\n" <>
         "Calls `Ash.Changeset.for_destroy/4` then `Ash.destroy/2`.\n\n" <>
@@ -559,6 +573,8 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
       "Auto-generated code interface for the `:#{action_name}` gen_api action (#{action_type}).\n\n" <>
         "Same as `#{action_name}/3` but raises on error."
 
+    result_encoder_escaped = Macro.escape(result_encoder)
+
     [
       quote do
         @doc unquote(doc_string)
@@ -566,6 +582,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
           {args, opts} = Ash.CodeInterface.params_and_opts(params_or_opts, opts)
           Ash.Changeset.for_destroy(record, unquote(action_name), args, opts)
           |> Ash.destroy(opts)
+          |> AshPhoenixGenApi.Codec.encode_result(unquote(result_encoder_escaped))
         end
       end,
       quote do
@@ -574,12 +591,13 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
           {args, opts} = Ash.CodeInterface.params_and_opts(params_or_opts, opts)
           Ash.Changeset.for_destroy(record, unquote(action_name), args, opts)
           |> Ash.destroy!(opts)
+          |> AshPhoenixGenApi.Codec.encode_value(unquote(result_encoder_escaped))
         end
       end
     ]
   end
 
-  defp build_generic_interface(action_name, bang_name, action_type) do
+  defp build_generic_interface(action_name, bang_name, action_type, result_encoder) do
     doc_string =
       "Auto-generated code interface for the `:#{action_name}` gen_api action (#{action_type}).\n\n" <>
         "Calls `Ash.ActionInput.for_action/4` then `Ash.run_action/2`.\n\n" <>
@@ -599,6 +617,8 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
       "Auto-generated code interface for the `:#{action_name}` gen_api action (#{action_type}).\n\n" <>
         "Same as `#{action_name}/2` but raises on error."
 
+    result_encoder_escaped = Macro.escape(result_encoder)
+
     [
       quote do
         @doc unquote(doc_string)
@@ -606,6 +626,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
           {args, opts} = Ash.CodeInterface.params_and_opts(params_or_opts, opts)
           Ash.ActionInput.for_action(__MODULE__, unquote(action_name), args, opts)
           |> Ash.run_action(opts)
+          |> AshPhoenixGenApi.Codec.encode_result(unquote(result_encoder_escaped))
         end
       end,
       quote do
@@ -614,6 +635,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
           {args, opts} = Ash.CodeInterface.params_and_opts(params_or_opts, opts)
           Ash.ActionInput.for_action(__MODULE__, unquote(action_name), args, opts)
           |> Ash.run_action!(opts)
+          |> AshPhoenixGenApi.Codec.encode_value(unquote(result_encoder_escaped))
         end
       end
     ]

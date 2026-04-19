@@ -523,4 +523,43 @@ defmodule AshPhoenixGenApi.Resource.Info do
       config -> ActionConfig.effective_mfa(config, resource)
     end
   end
+
+  @doc """
+  Gets the effective result_encoder for a specific action, resolving all defaults.
+
+  Resolves the result_encoder in this order:
+  1. Action-level `result_encoder` (if set)
+  2. Section-level `result_encoder` (if set)
+  3. Built-in default of `:struct`
+
+  The `result_encoder` determines how the result returned from the action
+  MFA call is encoded before being returned to the caller:
+
+  - `:struct` — Return the Ash resource struct as-is (default)
+  - `:map` — Convert the Ash resource struct to a map using `Map.from_struct/1`
+  - `{Module, :function, args}` — Custom encoder MFA
+
+  ## Parameters
+
+    - `resource` - The Ash resource module
+    - `action_name` - The action name atom
+
+  ## Examples
+
+      iex> AshPhoenixGenApi.Resource.Info.effective_result_encoder(MyApp.Chat.DirectMessage, :send_direct_message)
+      :struct
+
+      iex> AshPhoenixGenApi.Resource.Info.effective_result_encoder(MyApp.Chat.DirectMessage, :list_messages)
+      :map
+  """
+  @spec effective_result_encoder(module(), atom()) :: ActionConfig.result_encoder()
+  def effective_result_encoder(resource, action_name) when is_atom(resource) and is_atom(action_name) do
+    section_default = extract_opt(gen_api_result_encoder(resource), :struct)
+    action_config = action(resource, action_name)
+
+    case action_config do
+      nil -> section_default
+      config -> ActionConfig.effective_result_encoder(config, section_default)
+    end
+  end
 end

@@ -5,7 +5,7 @@ defmodule AshPhoenixGenApi.MixProject do
   Ash extension for generating PhoenixGenApi function configurations from Ash resources.
   """
 
-  @version "0.2.0"
+  @version "0.3.0"
 
   def project do
     [
