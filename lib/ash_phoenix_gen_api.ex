@@ -284,6 +284,7 @@ defmodule AshPhoenixGenApi do
   - `AshPhoenixGenApi.Domain` — Domain-level DSL extension
   - `AshPhoenixGenApi.Domain.Info` — Domain introspection helpers
   - `AshPhoenixGenApi.TypeMapper` — Ash type to PhoenixGenApi type mapping
+  - `AshPhoenixGenApi.JsonConfig` — JSON function config list generation utilities
   - `AshPhoenixGenApi.Transformers.DefineFunConfigs` — Resource transformer
   - `AshPhoenixGenApi.Transformers.DefineDomainSupporter` — Domain transformer
   - `AshPhoenixGenApi.Verifiers.VerifyActionConfigs` — Resource verifier
@@ -318,6 +319,7 @@ defmodule AshPhoenixGenApi do
       AshPhoenixGenApi.Domain,
       AshPhoenixGenApi.Domain.Info,
       AshPhoenixGenApi.TypeMapper,
+      AshPhoenixGenApi.JsonConfig,
       AshPhoenixGenApi.Transformers.DefineFunConfigs,
       AshPhoenixGenApi.Transformers.DefineDomainSupporter,
       AshPhoenixGenApi.Verifiers.VerifyActionConfigs,

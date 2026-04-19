@@ -106,6 +106,9 @@ defmodule AshPhoenixGenApi.MixProject do
         ],
         "Type Mapping": [
           AshPhoenixGenApi.TypeMapper
+        ],
+        Utilities: [
+          AshPhoenixGenApi.JsonConfig
         ]
       ]
     ]
