@@ -296,18 +296,19 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
     explicit_arg_orders = action_config.arg_orders
 
     cond do
-      # Both explicitly provided
-      is_map(explicit_arg_types) and map_size(explicit_arg_types) > 0 and
-          is_list(explicit_arg_orders) and explicit_arg_orders != [] ->
+      # Both explicitly provided (arg_orders is a list, arg_types is a map)
+      is_list(explicit_arg_orders) and explicit_arg_orders != [] and
+          is_map(explicit_arg_types) and map_size(explicit_arg_types) > 0 ->
         {explicit_arg_types, explicit_arg_orders}
 
-      # Only arg_types explicitly provided — derive arg_orders from keys
-      is_map(explicit_arg_types) and map_size(explicit_arg_types) > 0 ->
-        {explicit_arg_types, Map.keys(explicit_arg_types)}
+      # arg_orders is :map (default) — keep :map so FunConfig passes args as a map
+      explicit_arg_orders == :map and is_map(explicit_arg_types) and map_size(explicit_arg_types) > 0 ->
+        {explicit_arg_types, :map}
 
-      # Auto-derive from the Ash action definition
+      # Auto-derive from the Ash action definition — arg_orders defaults to :map
       true ->
-        auto_derive_arg_config(resource, action_config.name, dsl_state)
+        {arg_types, _arg_orders} = auto_derive_arg_config(resource, action_config.name, dsl_state)
+        {arg_types, :map}
     end
   end
 

@@ -21,7 +21,7 @@ defmodule AshPhoenixGenApi.Resource.ActionConfig do
   - `version` - API version string
   - `mfa` - Explicit MFA tuple (overrides auto-generated)
   - `arg_types` - Explicit argument types map (overrides auto-derived)
-  - `arg_orders` - Explicit argument order list (overrides auto-derived)
+  - `arg_orders` - Explicit argument order list (overrides auto-derived), or `:map` to derive from arg_types keys (default)
   - `disabled` - Whether this endpoint is disabled
   - `code_interface?` - Whether to generate a code interface function for this action
   - `result_encoder` - How to encode the result returned from the action MFA call
@@ -112,7 +112,7 @@ defmodule AshPhoenixGenApi.Resource.ActionConfig do
           version: String.t() | nil,
           mfa: {module(), atom(), [any()]} | nil,
           arg_types: %{String.t() => gen_api_type()} | nil,
-          arg_orders: [String.t()] | nil,
+          arg_orders: [String.t()] | :map,
           disabled: boolean(),
           code_interface?: boolean() | nil,
           result_encoder: result_encoder(),
@@ -133,7 +133,7 @@ defmodule AshPhoenixGenApi.Resource.ActionConfig do
     :version,
     :mfa,
     :arg_types,
-    :arg_orders,
+    arg_orders: :map,
     disabled: false,
     code_interface?: nil,
     result_encoder: nil,
@@ -289,6 +289,7 @@ defmodule AshPhoenixGenApi.Resource.ActionConfig do
   Checks if this action config has explicit arg_orders defined.
   """
   @spec has_explicit_arg_orders?(t()) :: boolean()
+  def has_explicit_arg_orders?(%__MODULE__{arg_orders: :map}), do: false
   def has_explicit_arg_orders?(%__MODULE__{arg_orders: nil}), do: false
   def has_explicit_arg_orders?(%__MODULE__{arg_orders: []}), do: false
   def has_explicit_arg_orders?(%__MODULE__{arg_orders: _}), do: true

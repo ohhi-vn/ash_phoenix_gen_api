@@ -526,6 +526,9 @@ defmodule AshPhoenixGenApi.JsonConfig do
     arg_orders = Map.get(fun_config, :arg_orders, []) || []
     arg_types = Map.get(fun_config, :arg_types, %{}) || %{}
 
+    # When arg_orders is :map, derive order from arg_types keys
+    arg_orders = if arg_orders == :map, do: Map.keys(arg_types), else: arg_orders
+
     arg_orders
     |> Enum.map(fn arg_name ->
       value =

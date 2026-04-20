@@ -46,7 +46,9 @@ defmodule AshPhoenixGenApi.Resource do
     Each `action` entity maps an Ash action to a PhoenixGenApi `FunConfig`.
     If `request_type` is not specified, it defaults to the action name as a string.
     If `arg_types` and `arg_orders` are not specified, they are auto-derived
-    from the Ash action's accepted attributes and arguments.
+    from the Ash action's accepted attributes and arguments. `arg_orders`
+    defaults to `:map`, which derives the order from `arg_types` keys. Set
+    to a list of argument name strings to specify explicit ordering.
     """,
     examples: [
       """
@@ -238,11 +240,13 @@ defmodule AshPhoenixGenApi.Resource do
       ],
       arg_orders: [
         type: :any,
+        default: :map,
         doc: """
-        Explicit argument order list. When provided, overrides the auto-derived
-        arg_orders from the Ash action.
+        Explicit argument order list, or `:map` to derive from arg_types keys.
 
-        Example: `["user_id", "content", "file_id"]`
+        - A list of argument name strings overrides the auto-derived order.
+          Example: `["user_id", "content", "file_id"]`
+        - `:map` (default) derives arg_orders from the arg_types map keys.
         """
       ],
       disabled: [

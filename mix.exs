@@ -38,7 +38,7 @@ defmodule AshPhoenixGenApi.MixProject do
     [
       {:ash, ash_version("~> 3.24")},
       {:spark, "~> 2.6"},
-      {:phoenix_gen_api, "~> 2.7"},
+      {:phoenix_gen_api, "~> 2.8"},
       # Dev/Test
       {:igniter, "~> 0.7", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.40", only: [:dev, :test], runtime: false},
@@ -94,6 +94,7 @@ defmodule AshPhoenixGenApi.MixProject do
       groups_for_modules: [
         Extensions: [
           AshPhoenixGenApi.Resource,
+          AshPhoenixGenApi.Resource.ActionConfig,
           AshPhoenixGenApi.Domain
         ],
         Introspection: [

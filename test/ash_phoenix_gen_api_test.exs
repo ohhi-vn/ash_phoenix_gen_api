@@ -390,6 +390,11 @@ defmodule AshPhoenixGenApi.Resource.ActionConfigTest do
       assert ActionConfig.has_explicit_arg_orders?(config) == true
     end
 
+    test "returns false when arg_orders is :map (default)" do
+      config = %ActionConfig{arg_orders: :map}
+      assert ActionConfig.has_explicit_arg_orders?(config) == false
+    end
+
     test "returns false when arg_orders is nil" do
       config = %ActionConfig{arg_orders: nil}
       assert ActionConfig.has_explicit_arg_orders?(config) == false
@@ -627,7 +632,7 @@ defmodule AshPhoenixGenApi.ResourceTest do
       # The create action accepts [:from_user_id, :to_user_id, :content, :reply_to_id, :file_id]
       # UUIDs map to :string, :string maps to :string
       assert is_map(fc.arg_types)
-      assert is_list(fc.arg_orders)
+      assert fc.arg_orders == :map
       assert Map.has_key?(fc.arg_types, "from_user_id")
       assert Map.has_key?(fc.arg_types, "content")
     end
