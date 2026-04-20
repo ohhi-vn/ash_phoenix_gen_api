@@ -9,7 +9,9 @@ defmodule AshPhoenixGenApi.Codec do
   ## Encoder Modes
 
   - `:struct` — Return the Ash resource struct as-is (default, no encoding)
-  - `:map` — Convert the Ash resource struct to a map using `Map.from_struct/1`
+  - `:map` — Convert the Ash resource struct to a map containing only public fields
+    (using `Ash.Resource.Info.public_fields/1` to filter; falls back to `Map.from_struct/1`
+    for non-Ash-resource structs)
   - `{Module, :function, args}` — Custom encoder MFA. The function receives
     the result as its first argument, followed by `args`, and must return
     the encoded result.
@@ -22,8 +24,10 @@ defmodule AshPhoenixGenApi.Codec do
   Only encodes the value on success; errors are passed through unchanged.
 
   For `:map` encoding:
-  - Single structs are converted with `Map.from_struct/1`
-  - Lists of structs are mapped with `Enum.map(&Map.from_struct/1)`
+  - Single Ash resource structs are converted to maps containing only public fields
+    (using `Ash.Resource.Info.public_fields/1` to filter)
+  - Lists of structs are mapped with each struct filtered to public fields
+  - Non-Ash-resource structs fall back to `Map.from_struct/1`
   - The atom `:ok` (from destroy actions) is returned as-is
   - Non-struct values are returned as-is
 
@@ -41,12 +45,12 @@ defmodule AshPhoenixGenApi.Codec do
       # Encode an ok/error tuple result
       result = Ash.create(changeset)
       AshPhoenixGenApi.Codec.encode_result(result, :map)
-      #=> {:ok, %{id: "...", name: "...", __meta__: ...}}
+      #=> {:ok, %{id: "...", name: "..."}}  # only public fields
 
       # Encode a direct value (from bang functions)
       record = Ash.create!(changeset)
       AshPhoenixGenApi.Codec.encode_value(record, :map)
-      #=> %{id: "...", name: "...", __meta__: ...}
+      #=> %{id: "...", name: "..."}  # only public fields
 
       # Custom encoder MFA
       AshPhoenixGenApi.Codec.encode_value(record, {MyEncoder, :to_json, []})
@@ -79,7 +83,7 @@ defmodule AshPhoenixGenApi.Codec do
       {:ok, %MyResource{id: "1"}}
 
       iex> AshPhoenixGenApi.Codec.encode_result({:ok, %MyResource{id: "1"}}, :map)
-      {:ok, %{id: "1"}}
+      {:ok, %{id: "1"}}  # only public fields from the Ash resource
 
       iex> AshPhoenixGenApi.Codec.encode_result({:error, :some_error}, :map)
       {:error, :some_error}
@@ -123,10 +127,10 @@ defmodule AshPhoenixGenApi.Codec do
       %MyResource{id: "1"}
 
       iex> AshPhoenixGenApi.Codec.encode_value(%MyResource{id: "1"}, :map)
-      %{id: "1"}
+      %{id: "1"}  # only public fields from the Ash resource
 
       iex> AshPhoenixGenApi.Codec.encode_value([%MyResource{id: "1"}], :map)
-      [%{id: "1"}]
+      [%{id: "1"}]  # each struct filtered to public fields
 
       iex> AshPhoenixGenApi.Codec.encode_value(:ok, :map)
       :ok
@@ -165,11 +169,36 @@ defmodule AshPhoenixGenApi.Codec do
   # Private helpers
   # ---------------------------------------------------------------------------
 
-  # Converts a struct to a map, removing the __struct__ key and metadata.
+  # Converts a struct to a map, keeping only public fields from the Ash resource.
   #
-  # Uses `Map.from_struct/1` which removes the `__struct__` key and
-  # any metadata fields (like `__meta__` for Ecto schemas).
+  # For Ash resources, uses `Ash.Resource.Info.public_fields/1` to determine
+  # which fields are public and filters the map accordingly. This excludes
+  # private attributes, internal metadata fields (like `__meta__`), and any
+  # other non-public fields.
+  #
+  # For non-Ash-resource structs, falls back to `Map.from_struct/1`.
   defp struct_to_map(struct) do
-    Map.from_struct(struct)
+    resource = struct.__struct__
+
+    if ash_resource?(resource) do
+      public_field_names =
+        resource
+        |> Ash.Resource.Info.public_fields()
+        |> Enum.map(& &1.name)
+        |> MapSet.new()
+
+      struct
+      |> Map.from_struct()
+      |> Map.filter(fn {key, _value} -> MapSet.member?(public_field_names, key) end)
+    else
+      Map.from_struct(struct)
+    end
+  end
+
+  # Checks if a module is an Ash Resource by verifying it uses the Ash.Resource DSL.
+  defp ash_resource?(module) do
+    Spark.Dsl.is?(module, Ash.Resource)
+  rescue
+    _ -> false
   end
 end

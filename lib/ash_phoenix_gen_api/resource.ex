@@ -278,7 +278,9 @@ defmodule AshPhoenixGenApi.Resource do
         How to encode the result returned from the action MFA call.
 
         - `:struct` — Return the Ash resource struct as-is (default behavior)
-        - `:map` — Convert the Ash resource struct to a map using `Map.from_struct/1`
+        - `:map` — Convert the Ash resource struct to a map containing only public fields
+          (using `Ash.Resource.Info.public_fields/1` to filter; falls back to
+          `Map.from_struct/1` for non-Ash-resource structs)
         - `{Module, :function, args}` — Custom encoder MFA. The function receives
           the result as its first argument, followed by `args`, and must return
           the encoded result.
@@ -286,8 +288,10 @@ defmodule AshPhoenixGenApi.Resource do
         When `nil` (the default), inherits from the section-level `result_encoder` setting.
 
         The encoding is applied in the generated code interface functions.
-        For `:map` encoding, single structs are converted with `Map.from_struct/1`,
-        and lists of structs are mapped with `Enum.map(&Map.from_struct/1)`.
+        For `:map` encoding, Ash resource structs are converted to maps containing
+        only their public fields (attributes, calculations, aggregates, relationships).
+        Lists of structs are mapped accordingly. Non-Ash-resource structs fall back
+        to `Map.from_struct/1`.
         For custom MFA encoders, the function receives the result and must return
         the encoded value.
 
@@ -493,15 +497,19 @@ defmodule AshPhoenixGenApi.Resource do
         before being returned to the caller.
 
         - `:struct` — Return the Ash resource struct as-is (default)
-        - `:map` — Convert the Ash resource struct to a map using `Map.from_struct/1`
+        - `:map` — Convert the Ash resource struct to a map containing only public fields
+          (using `Ash.Resource.Info.public_fields/1` to filter; falls back to
+          `Map.from_struct/1` for non-Ash-resource structs)
         - `{Module, :function, args}` — Custom encoder MFA. The function receives
           the result as its first argument, followed by `args`, and must return
           the encoded result.
 
         Individual actions can override this with their own `result_encoder` option.
 
-        For `:map` encoding, single structs are converted with `Map.from_struct/1`,
-        and lists of structs are mapped with `Enum.map(&Map.from_struct/1)`.
+        For `:map` encoding, Ash resource structs are converted to maps containing
+        only their public fields (attributes, calculations, aggregates, relationships).
+        Lists of structs are mapped accordingly. Non-Ash-resource structs fall back
+        to `Map.from_struct/1`.
         For custom MFA encoders, the function receives the result and must return
         the encoded value.
 

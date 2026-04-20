@@ -326,7 +326,9 @@ defmodule AshPhoenixGenApi.Resource.ActionConfig do
   The `result_encoder` determines how the result from the action MFA call is encoded:
 
   - `:struct` — Return the Ash resource struct as-is (default behavior)
-  - `:map` — Convert the Ash resource struct to a map using `Map.from_struct/1`
+  - `:map` — Convert the Ash resource struct to a map containing only public fields
+    (using `Ash.Resource.Info.public_fields/1` to filter; falls back to
+    `Map.from_struct/1` for non-Ash-resource structs)
   - `{Module, :function, args}` — Custom encoder MFA. The function receives
     the result as its first argument, followed by `args`, and must return
     the encoded result.

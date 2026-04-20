@@ -263,7 +263,9 @@ defmodule AshPhoenixGenApi do
   ### Encoder Modes
 
   - `:struct` — Return the Ash resource struct as-is (default)
-  - `:map` — Convert the Ash resource struct to a map using `Map.from_struct/1`
+  - `:map` — Convert the Ash resource struct to a map containing only public fields
+    (using `Ash.Resource.Info.public_fields/1` to filter; falls back to
+    `Map.from_struct/1` for non-Ash-resource structs)
   - `{Module, :function, args}` — Custom encoder MFA. The function receives
     the result as its first argument, followed by `args`, and must return
     the encoded result.
@@ -311,9 +313,11 @@ defmodule AshPhoenixGenApi do
   ### Encoding Behavior
 
   For `:map` encoding:
-  - Single structs are converted with `Map.from_struct/1` (removes `__struct__`
-    and metadata keys like `__meta__`)
-  - Lists of structs are mapped with `Enum.map(&Map.from_struct/1)`
+  - Ash resource structs are converted to maps containing only their public fields
+    (attributes, calculations, aggregates, relationships) using
+    `Ash.Resource.Info.public_fields/1` to filter
+  - Non-Ash-resource structs fall back to `Map.from_struct/1`
+  - Lists of structs are mapped accordingly
   - The atom `:ok` (from destroy actions) is returned as-is
   - Non-struct values (e.g., generic action results) are returned as-is
 

@@ -536,7 +536,9 @@ defmodule AshPhoenixGenApi.Resource.Info do
   MFA call is encoded before being returned to the caller:
 
   - `:struct` — Return the Ash resource struct as-is (default)
-  - `:map` — Convert the Ash resource struct to a map using `Map.from_struct/1`
+  - `:map` — Convert the Ash resource struct to a map containing only public fields
+    (using `Ash.Resource.Info.public_fields/1` to filter; falls back to
+    `Map.from_struct/1` for non-Ash-resource structs)
   - `{Module, :function, args}` — Custom encoder MFA
 
   ## Parameters
