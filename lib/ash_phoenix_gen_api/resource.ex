@@ -29,6 +29,12 @@ defmodule AshPhoenixGenApi.Resource do
           action :get_conversation do
             timeout 5_000
           end
+
+          mfa :ping do
+            request_type "ping"
+            mfa {MyApp.Chat.Api, :ping, []}
+            arg_types %{}
+          end
         end
       end
 
@@ -301,6 +307,220 @@ defmodule AshPhoenixGenApi.Resource do
     ]
   }
 
+  @mfa %Spark.Dsl.Entity{
+    name: :mfa,
+    target: AshPhoenixGenApi.Resource.MfaConfig,
+    describe: """
+    Configures a standalone PhoenixGenApi MFA endpoint.
+
+    Unlike `action` entities which map an Ash resource action to a FunConfig,
+    `mfa` entities define endpoints that call an arbitrary MFA function directly.
+    This is useful for exposing custom functions that don't map to standard
+    Ash CRUD actions, such as utility endpoints, batch operations, or
+    service-to-service calls.
+
+    Both `request_type` and `mfa` are required. `arg_types` must be explicitly
+    provided since there is no Ash action to auto-derive from. `arg_orders`
+    defaults to `:map`, which passes arguments as a map with string keys.
+    """,
+    examples: [
+      """
+      mfa :my_custom do
+        request_type "my_custom"
+        mfa {MyApp.Interface.Api, :my_custom, []}
+        arg_types %{"user_id" => :string}
+        timeout 5_000
+      end
+      """,
+      """
+      mfa :batch_process do
+        request_type "batch_process"
+        mfa {MyApp.BatchProcessor, :run, []}
+        arg_types %{"items" => {:list_string, 1000, 50}, "mode" => :string}
+        arg_orders ["items", "mode"]
+        response_type :async
+        request_info true
+      end
+      """
+    ],
+    args: [:name],
+    schema: [
+      name: [
+        type: :atom,
+        required: true,
+        doc: """
+        A unique identifier for this MFA endpoint. Used to distinguish
+        this endpoint from others in the same resource.
+        """
+      ],
+      request_type: [
+        type: :string,
+        required: true,
+        doc: """
+        The PhoenixGenApi request type string used by clients to call this endpoint.
+        Must be unique across all endpoints in the same resource.
+
+        Example: `"my_custom"`, `"batch_process"`
+        """
+      ],
+      mfa: [
+        type: :any,
+        required: true,
+        doc: """
+        The MFA tuple to call when this endpoint is invoked.
+
+        The function is called with `predefined_args ++ converted_args ++ info_args`:
+        - `predefined_args` — the third element of this tuple (e.g., `[]`)
+        - `converted_args` — request arguments (a map when `arg_orders` is `:map`,
+          or positional values when `arg_orders` is a list)
+        - `info_args` — request info map if `request_info` is `true`
+
+        Example: `{MyApp.Interface.Api, :my_custom, []}`
+        """
+      ],
+      arg_types: [
+        type: :any,
+        required: true,
+        doc: """
+        Argument types map. Required since there is no Ash action to auto-derive from.
+
+        Keys are argument name strings, values are PhoenixGenApi type atoms/tuples:
+        - `:string` - String values
+        - `:num` - Numeric values
+        - `{:list_string, max_items, max_item_length}` - List of strings
+        - `{:list_num, max_items}` - List of numbers
+
+        Example: `%{"user_id" => :string, "count" => :num, "tags" => {:list_string, 1000, 50}}`
+        """
+      ],
+      arg_orders: [
+        type: :any,
+        default: :map,
+        doc: """
+        Argument order list, or `:map` to pass arguments as a map (default).
+
+        - A list of argument name strings specifies positional ordering.
+          Example: `["user_id", "content", "file_id"]`
+        - `:map` (default) passes arguments as a map with string keys.
+        """
+      ],
+      timeout: [
+        type: :any,
+        doc: """
+        Timeout in milliseconds for the function call.
+        Defaults to the `gen_api` section-level `timeout` (which defaults to `5000`).
+
+        Accepts a positive integer or `:infinity`.
+        """
+      ],
+      response_type: [
+        type: :atom,
+        doc: """
+        The response mode for this endpoint.
+
+        - `:sync` - Client waits for the result
+        - `:async` - Client receives an ack, then the result later
+        - `:stream` - Client receives streamed chunks
+        - `:none` - Fire and forget
+
+        Defaults to the `gen_api` section-level `response_type` (which defaults to `:async`).
+        """
+      ],
+      request_info: [
+        type: :boolean,
+        doc: """
+        Whether to pass request info (user_id, device_id, request_id) as the last
+        argument to the MFA function. When `true`, the MFA will receive
+        a map with `%{user_id: ..., device_id: ..., request_id: ...}` as the
+        last argument.
+
+        Defaults to the `gen_api` section-level `request_info` (which defaults to `true`).
+        """
+      ],
+      check_permission: [
+        type: :any,
+        doc: """
+        Permission check mode for this endpoint.
+
+        - `false` - No permission check
+        - `:any_authenticated` - Requires a valid user_id
+        - `{:arg, "arg_name"}` - The specified argument must match user_id
+        - `{:role, ["admin", "moderator"]}` - User must have one of the listed roles
+
+        Defaults to the `gen_api` section-level `check_permission` (which defaults to `false`).
+        """
+      ],
+      permission_callback: [
+        type: :any,
+        default: nil,
+        doc: """
+        A custom callback MFA for permission checking. When set, takes precedence
+        over `check_permission`.
+
+        Accepts `{Module, :function, []}` or `nil`. The callback function receives
+        `request_type` (string) and `args` (map) as arguments and returns `true`
+        (continue) or `false` (permission denied).
+
+        When `nil`, inherits from the section-level `permission_callback`.
+        When both `permission_callback` and `check_permission` are set,
+        `permission_callback` takes precedence and is stored as
+        `{:callback, {Module, :function, []}}` in the FunConfig's `check_permission` field.
+
+        Defaults to the `gen_api` section-level `permission_callback` (which defaults to `nil`).
+        """
+      ],
+      choose_node_mode: [
+        type: :any,
+        doc: """
+        Node selection strategy for this endpoint. Overrides the section-level setting.
+
+        - `:random` - Select a random node
+        - `:hash` - Hash-based selection using request_type
+        - `{:hash, key}` - Hash-based selection using the specified argument key
+        - `:round_robin` - Round-robin across nodes
+        """
+      ],
+      nodes: [
+        type: :any,
+        doc: """
+        Target nodes for this endpoint. Overrides the section-level setting.
+
+        Can be:
+        - A list of node atoms: `[:"node1@host", :"node2@host"]`
+        - An MFA tuple: `{ClusterHelper, :get_nodes, [:chat]}`
+        - `:local` - Execute on the local node
+        """
+      ],
+      retry: [
+        type: :any,
+        doc: """
+        Retry configuration when execution fails.
+
+        - `nil` (default) - No retry
+        - A positive number `n` - Equivalent to `{:all_nodes, n}`
+        - `{:same_node, n}` - Retry on the same node(s)
+        - `{:all_nodes, n}` - Retry across all available nodes
+        """
+      ],
+      version: [
+        type: :string,
+        doc: """
+        Version string for this API endpoint. Used for API versioning.
+        Defaults to the `gen_api` section-level `version` (which defaults to `"0.0.1"`).
+        """
+      ],
+      disabled: [
+        type: :boolean,
+        default: false,
+        doc: """
+        When `true`, this endpoint is disabled and will not be included in
+        the generated FunConfig list. Useful for temporarily disabling an
+        endpoint without removing its configuration.
+        """
+      ]
+    ]
+  }
+
   @gen_api %Spark.Dsl.Section{
     name: :gen_api,
     describe: """
@@ -518,7 +738,8 @@ defmodule AshPhoenixGenApi.Resource do
       ]
     ],
     entities: [
-      @action
+      @action,
+      @mfa
     ]
   }
 

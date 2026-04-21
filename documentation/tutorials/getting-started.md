@@ -291,7 +291,38 @@ Configuration values are resolved in this order (highest priority first):
 
 ## Custom MFA
 
-By default, the extension generates an MFA tuple as `{ResourceModule, :action_name, []}`. You can override this with an explicit `mfa`:
+The MFA (Module, Function, Arguments) tuple tells the gateway node which function to call when a request arrives. Understanding how it's called is key to configuring it correctly.
+
+### How the MFA is Called
+
+At runtime, the PhoenixGenApi executor calls your function like this:
+
+```elixir
+{mod, fun, predefined_args} = fun_config.mfa
+final_args = predefined_args ++ converted_args ++ info_args
+apply(mod, fun, final_args)
+```
+
+Where:
+
+- **`predefined_args`** — the third element of your MFA tuple (e.g., `[]`). These are prepended to every call, useful for passing static context.
+- **`converted_args`** — the request arguments, derived from `arg_types` and `arg_orders`:
+  - When `arg_orders` is `:map` (the default), this is a single-element list containing a map with string keys: `[%{"from_user_id" => "...", "content" => "..."}]`
+  - When `arg_orders` is an explicit list, this is a list of positional values: `["user_123", "hello"]`
+  - When there are no arguments, this is `[]`
+- **`info_args`** — if `request_info` is `true`, a single-element list with the request info map: `[%{user_id: "...", device_id: "...", request_id: "..."}]`. Otherwise `[]`.
+
+### Default MFA
+
+By default, the extension generates `{ResourceModule, :action_name, []}`. This works because the extension auto-generates code interface functions on the resource module (when `code_interface?` is `true`, which is the default). For example, with `arg_orders: :map` and `request_info: true`, the generated function is called as:
+
+```elixir
+MyApp.Chat.DirectMessage.create(%{"from_user_id" => "...", "content" => "..."}, %{user_id: "...", device_id: "...", request_id: "..."})
+```
+
+### Overriding with a Custom MFA
+
+You can override the default with an explicit `mfa` to route requests to your own function:
 
 ```elixir
 gen_api do
@@ -304,7 +335,167 @@ gen_api do
 end
 ```
 
-This generates a FunConfig with `mfa: {MyApp.Interface.Api, :send_direct_message, []}`, which means the gateway node will call `MyApp.Interface.Api.send_direct_message/3` (with args + request_info) instead of the resource's action directly.
+This generates a FunConfig with `mfa: {MyApp.Interface.Api, :send_direct_message, []}`. Your function must accept the same calling convention. With the default `arg_orders: :map` and `request_info: true`:
+
+```elixir
+defmodule MyApp.Interface.Api do
+  # Called as: send_direct_message(args_map, request_info)
+  def send_direct_message(args, request_info) do
+    # args is a map with string keys, e.g., %{"from_user_id" => "...", "content" => "..."}
+    # request_info is a map, e.g., %{user_id: "...", device_id: "...", request_id: "..."}
+    # ...
+  end
+end
+```
+
+If `request_info` is `false`, the `request_info` argument is omitted:
+
+```elixir
+def send_direct_message(args) do
+  # Only receives the args map
+end
+```
+
+If you set `arg_orders` to an explicit list (e.g., `["from_user_id", "content"]`), arguments are passed positionally instead of as a map:
+
+```elixir
+def send_direct_message(from_user_id, content, request_info) do
+  # Positional args in the order specified by arg_orders, plus request_info
+end
+```
+
+You can also use the third element of the MFA tuple to pass static predefined arguments:
+
+```elixir
+mfa {MyApp.Interface.Api, :send_direct_message, [:chat_service]}
+```
+
+This prepends `:chat_service` to every call:
+
+```elixir
+def send_direct_message(service, args, request_info) do
+  # service is always :chat_service
+  # ...
+end
+```
+
+## Standalone MFA Endpoints
+
+In addition to `action` entities (which map Ash resource actions to FunConfigs), you can define standalone MFA endpoints using the `mfa` entity. These call an arbitrary function directly — with no Ash action involved.
+
+This is useful for exposing custom functions that don't map to standard Ash CRUD actions, such as utility endpoints, batch operations, or service-to-service calls.
+
+### Basic Usage
+
+```elixir
+gen_api do
+  service "chat"
+
+  action :create do
+    request_type "send_direct_message"
+  end
+
+  mfa :ping do
+    request_type "ping"
+    mfa {MyApp.Chat.Api, :ping, []}
+    arg_types %{}
+  end
+end
+```
+
+### Required Fields
+
+Unlike `action` entities, `mfa` entities require explicit configuration since there is no Ash action to auto-derive from:
+
+- **`request_type`** — Required. The PhoenixGenApi request type string.
+- **`mfa`** — Required. The MFA tuple to call, e.g., `{Module, :function, []}`.
+- **`arg_types`** — Required. The argument types map. Use `%{}` for endpoints with no arguments.
+
+### With Arguments
+
+```elixir
+mfa :search do
+  request_type "search"
+  mfa {MyApp.SearchHandler, :search, []}
+  arg_types %{"query" => :string, "limit" => :num}
+  # arg_orders defaults to :map — args are passed as a map with string keys
+end
+```
+
+When `arg_orders` is `:map` (the default), your function receives a map:
+
+```elixir
+def search(args, request_info) do
+  # args is %{"query" => "...", "limit" => 10}
+  # request_info is %{user_id: ..., device_id: ..., request_id: ...}
+end
+```
+
+For positional arguments, set `arg_orders` to a list:
+
+```elixir
+mfa :search do
+  request_type "search"
+  mfa {MyApp.SearchHandler, :search, []}
+  arg_types %{"query" => :string, "limit" => :num}
+  arg_orders ["query", "limit"]
+end
+```
+
+Your function then receives positional args:
+
+```elixir
+def search(query, limit, request_info) do
+  # query is the string value, limit is the number
+end
+```
+
+### With Predefined Arguments
+
+Use the third element of the MFA tuple to pass static context:
+
+```elixir
+mfa :batch_process do
+  request_type "batch_process"
+  mfa {MyApp.BatchProcessor, :run, [:chat_service]}
+  arg_types %{"items" => {:list_string, 1000, 50}}
+  response_type :async
+end
+```
+
+This prepends `:chat_service` to every call:
+
+```elixir
+def run(service, args, request_info) do
+  # service is always :chat_service
+  # ...
+end
+```
+
+### No Code Interface
+
+Unlike `action` entities, `mfa` entities do not generate code interface functions on the resource module. This is because there is no Ash action to wrap — the MFA function is called directly by the PhoenixGenApi gateway.
+
+### Inheriting Section Defaults
+
+Like `action` entities, `mfa` entities inherit defaults from the `gen_api` section:
+
+```elixir
+gen_api do
+  service "chat"
+  timeout 5_000
+  response_type :async
+  request_info true
+
+  mfa :ping do
+    request_type "ping"
+    mfa {MyApp.Chat.Api, :ping, []}
+    arg_types %{}
+    timeout 1_000  # Override section default
+    # response_type, request_info, etc. inherited from section
+  end
+end
+```
 
 ## Disabling an Action
 
@@ -331,9 +522,11 @@ Disabled actions are excluded from the generated FunConfig list.
 The extension performs compile-time verification to catch configuration errors early:
 
 - **Action existence** — Every `action` entity must reference an existing Ash action on the resource
-- **Request type uniqueness** — No two actions in the same resource may share a `request_type`
+- **MFA required fields** — Every `mfa` entity must have `request_type`, `mfa`, and `arg_types` set
+- **MFA tuple validity** — The `mfa` field must be a valid `{module, function, args_list}` tuple
+- **Request type uniqueness** — No two endpoints (actions or mfas) in the same resource may share a `request_type`
 - **Arg consistency** — When both `arg_types` and `arg_orders` are provided, their keys must match
-- **Permission arg existence** — When `check_permission` is `{:arg, "name"}`, the argument must exist
+- **Permission arg existence** — When `check_permission` is `{:arg, "name"}`, the argument must exist in `arg_types` (for `mfa` entities) or the Ash action (for `action` entities)
 - **Cross-resource request type uniqueness** — No two resources in the domain may expose the same `request_type`
 
 If any verification fails, you'll get a descriptive error message at compile time.
@@ -354,7 +547,17 @@ AshPhoenixGenApi.Resource.Info.fun_configs(MyApp.Chat.DirectMessage)
 #=> [%PhoenixGenApi.Structs.FunConfig{...}, ...]
 
 AshPhoenixGenApi.Resource.Info.request_types(MyApp.Chat.DirectMessage)
-#=> ["send_direct_message", "get_conversation", "update_content"]
+#=> ["send_direct_message", "get_conversation", "update_content", "ping"]
+
+# MFA-specific introspection
+AshPhoenixGenApi.Resource.Info.mfas(MyApp.Chat.DirectMessage)
+#=> [%AshPhoenixGenApi.Resource.MfaConfig{name: :ping, ...}, ...]
+
+AshPhoenixGenApi.Resource.Info.mfa(MyApp.Chat.DirectMessage, :ping)
+#=> %AshPhoenixGenApi.Resource.MfaConfig{name: :ping, request_type: "ping", ...}
+
+AshPhoenixGenApi.Resource.Info.enabled_mfas(MyApp.Chat.DirectMessage)
+#=> [%AshPhoenixGenApi.Resource.MfaConfig{name: :ping, disabled: false, ...}, ...]
 
 # Domain introspection
 AshPhoenixGenApi.Domain.Info.supporter_module(MyApp.Chat)

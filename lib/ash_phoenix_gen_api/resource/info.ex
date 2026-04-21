@@ -59,6 +59,7 @@ defmodule AshPhoenixGenApi.Resource.Info do
   use Spark.InfoGenerator, extension: AshPhoenixGenApi.Resource, sections: [:gen_api]
 
   alias AshPhoenixGenApi.Resource.ActionConfig
+  alias AshPhoenixGenApi.Resource.MfaConfig
 
   @doc """
   Gets a specific action configuration by name.
@@ -82,7 +83,34 @@ defmodule AshPhoenixGenApi.Resource.Info do
   def action(resource, action_name) when is_atom(resource) and is_atom(action_name) do
     resource
     |> gen_api()
+    |> Enum.filter(&match?(%ActionConfig{}, &1))
     |> Enum.find(&(&1.name == action_name))
+  end
+
+  @doc """
+  Gets a specific MFA configuration by name.
+
+  Returns `nil` if no MFA with the given name is configured.
+
+  ## Parameters
+
+    - `resource` - The Ash resource module
+    - `mfa_name` - The MFA name atom
+
+  ## Examples
+
+      iex> AshPhoenixGenApi.Resource.Info.mfa(MyApp.Chat.DirectMessage, :ping)
+      %AshPhoenixGenApi.Resource.MfaConfig{name: :ping, ...}
+
+      iex> AshPhoenixGenApi.Resource.Info.mfa(MyApp.Chat.DirectMessage, :nonexistent)
+      nil
+  """
+  @spec mfa(module(), atom()) :: MfaConfig.t() | nil
+  def mfa(resource, mfa_name) when is_atom(resource) and is_atom(mfa_name) do
+    resource
+    |> gen_api()
+    |> Enum.filter(&match?(%MfaConfig{}, &1))
+    |> Enum.find(&(&1.name == mfa_name))
   end
 
   @doc """
@@ -103,7 +131,51 @@ defmodule AshPhoenixGenApi.Resource.Info do
   def enabled_actions(resource) when is_atom(resource) do
     resource
     |> gen_api()
+    |> Enum.filter(&match?(%ActionConfig{}, &1))
     |> Enum.filter(&ActionConfig.enabled?/1)
+  end
+
+  @doc """
+  Gets all MFA configurations from the resource.
+
+  Returns a list of `MfaConfig` structs.
+
+  ## Parameters
+
+    - `resource` - The Ash resource module
+
+  ## Examples
+
+      iex> AshPhoenixGenApi.Resource.Info.mfas(MyApp.Chat.DirectMessage)
+      [%AshPhoenixGenApi.Resource.MfaConfig{name: :ping, ...}, ...]
+  """
+  @spec mfas(module()) :: [MfaConfig.t()]
+  def mfas(resource) when is_atom(resource) do
+    resource
+    |> gen_api()
+    |> Enum.filter(&match?(%MfaConfig{}, &1))
+  end
+
+  @doc """
+  Gets only enabled (non-disabled) MFA configurations.
+
+  Returns a list of `MfaConfig` structs where `disabled` is `false`.
+
+  ## Parameters
+
+    - `resource` - The Ash resource module
+
+  ## Examples
+
+      iex> AshPhoenixGenApi.Resource.Info.enabled_mfas(MyApp.Chat.DirectMessage)
+      [%AshPhoenixGenApi.Resource.MfaConfig{name: :ping, disabled: false, ...}, ...]
+  """
+  @spec enabled_mfas(module()) :: [MfaConfig.t()]
+  def enabled_mfas(resource) when is_atom(resource) do
+    resource
+    |> gen_api()
+    |> Enum.filter(&match?(%MfaConfig{}, &1))
+    |> Enum.filter(&MfaConfig.enabled?/1)
   end
 
   @doc """
@@ -196,9 +268,17 @@ defmodule AshPhoenixGenApi.Resource.Info do
   """
   @spec request_types(module()) :: [String.t()]
   def request_types(resource) when is_atom(resource) do
-    resource
-    |> enabled_actions()
-    |> Enum.map(&ActionConfig.effective_request_type/1)
+    action_types =
+      resource
+      |> enabled_actions()
+      |> Enum.map(&ActionConfig.effective_request_type/1)
+
+    mfa_types =
+      resource
+      |> enabled_mfas()
+      |> Enum.map(& &1.request_type)
+
+    action_types ++ mfa_types
   end
 
   @doc """

@@ -2623,3 +2623,985 @@ defmodule AshPhoenixGenApi.Domain.ResultEncoderTest do
     end
   end
 end
+
+defmodule AshPhoenixGenApi.Resource.MfaConfigTest do
+  use ExUnit.Case
+
+  alias AshPhoenixGenApi.Resource.MfaConfig
+
+  describe "effective_timeout/2" do
+    test "returns explicit timeout when set" do
+      config = %MfaConfig{timeout: 10_000}
+      assert MfaConfig.effective_timeout(config, 5_000) == 10_000
+    end
+
+    test "returns default when timeout is nil" do
+      config = %MfaConfig{timeout: nil}
+      assert MfaConfig.effective_timeout(config, 5_000) == 5_000
+    end
+
+    test "supports :infinity timeout" do
+      config = %MfaConfig{timeout: :infinity}
+      assert MfaConfig.effective_timeout(config, 5_000) == :infinity
+    end
+  end
+
+  describe "effective_response_type/2" do
+    test "returns explicit response_type when set" do
+      config = %MfaConfig{response_type: :sync}
+      assert MfaConfig.effective_response_type(config, :async) == :sync
+    end
+
+    test "returns default when response_type is nil" do
+      config = %MfaConfig{response_type: nil}
+      assert MfaConfig.effective_response_type(config, :async) == :async
+    end
+  end
+
+  describe "effective_request_info/2" do
+    test "returns explicit request_info when set" do
+      config = %MfaConfig{request_info: false}
+      assert MfaConfig.effective_request_info(config, true) == false
+    end
+
+    test "returns default when request_info is nil" do
+      config = %MfaConfig{request_info: nil}
+      assert MfaConfig.effective_request_info(config, true) == true
+    end
+  end
+
+  describe "effective_check_permission/2" do
+    test "returns explicit check_permission when set" do
+      config = %MfaConfig{check_permission: {:arg, "user_id"}}
+      assert MfaConfig.effective_check_permission(config, false) == {:arg, "user_id"}
+    end
+
+    test "returns default when check_permission is nil" do
+      config = %MfaConfig{check_permission: nil}
+      assert MfaConfig.effective_check_permission(config, false) == false
+    end
+  end
+
+  describe "effective_permission_callback/2" do
+    test "returns explicit permission_callback when set" do
+      config = %MfaConfig{permission_callback: {MyModule, :check, []}}
+      assert MfaConfig.effective_permission_callback(config, nil) == {MyModule, :check, []}
+    end
+
+    test "returns default when permission_callback is nil" do
+      config = %MfaConfig{permission_callback: nil}
+      assert MfaConfig.effective_permission_callback(config, {MyModule, :check, []}) == {MyModule, :check, []}
+    end
+
+    test "returns nil when both are nil" do
+      config = %MfaConfig{permission_callback: nil}
+      assert MfaConfig.effective_permission_callback(config, nil) == nil
+    end
+  end
+
+  describe "effective_choose_node_mode/2" do
+    test "returns explicit choose_node_mode when set" do
+      config = %MfaConfig{choose_node_mode: :hash}
+      assert MfaConfig.effective_choose_node_mode(config, :random) == :hash
+    end
+
+    test "returns default when choose_node_mode is nil" do
+      config = %MfaConfig{choose_node_mode: nil}
+      assert MfaConfig.effective_choose_node_mode(config, :random) == :random
+    end
+  end
+
+  describe "effective_nodes/2" do
+    test "returns explicit nodes when set" do
+      config = %MfaConfig{nodes: [:"node1@host"]}
+      assert MfaConfig.effective_nodes(config, :local) == [:"node1@host"]
+    end
+
+    test "returns default when nodes is nil" do
+      config = %MfaConfig{nodes: nil}
+      assert MfaConfig.effective_nodes(config, :local) == :local
+    end
+  end
+
+  describe "effective_retry/2" do
+    test "returns explicit retry when set" do
+      config = %MfaConfig{retry: {:all_nodes, 3}}
+      assert MfaConfig.effective_retry(config, nil) == {:all_nodes, 3}
+    end
+
+    test "returns default when retry is nil" do
+      config = %MfaConfig{retry: nil}
+      assert MfaConfig.effective_retry(config, nil) == nil
+    end
+  end
+
+  describe "effective_version/2" do
+    test "returns explicit version when set" do
+      config = %MfaConfig{version: "2.0.0"}
+      assert MfaConfig.effective_version(config, "0.0.1") == "2.0.0"
+    end
+
+    test "returns default when version is nil" do
+      config = %MfaConfig{version: nil}
+      assert MfaConfig.effective_version(config, "0.0.1") == "0.0.1"
+    end
+  end
+
+  describe "has_explicit_arg_types?/1" do
+    test "returns true when arg_types has entries" do
+      config = %MfaConfig{arg_types: %{"user_id" => :string}}
+      assert MfaConfig.has_explicit_arg_types?(config) == true
+    end
+
+    test "returns false when arg_types is nil" do
+      config = %MfaConfig{arg_types: nil}
+      assert MfaConfig.has_explicit_arg_types?(config) == false
+    end
+
+    test "returns false when arg_types is empty map" do
+      config = %MfaConfig{arg_types: %{}}
+      assert MfaConfig.has_explicit_arg_types?(config) == false
+    end
+  end
+
+  describe "has_explicit_arg_orders?/1" do
+    test "returns true when arg_orders has entries" do
+      config = %MfaConfig{arg_orders: ["user_id", "content"]}
+      assert MfaConfig.has_explicit_arg_orders?(config) == true
+    end
+
+    test "returns false when arg_orders is :map (default)" do
+      config = %MfaConfig{arg_orders: :map}
+      assert MfaConfig.has_explicit_arg_orders?(config) == false
+    end
+
+    test "returns false when arg_orders is nil" do
+      config = %MfaConfig{arg_orders: nil}
+      assert MfaConfig.has_explicit_arg_orders?(config) == false
+    end
+
+    test "returns false when arg_orders is empty list" do
+      config = %MfaConfig{arg_orders: []}
+      assert MfaConfig.has_explicit_arg_orders?(config) == false
+    end
+  end
+
+  describe "enabled?/1" do
+    test "returns true when disabled is false" do
+      config = %MfaConfig{disabled: false}
+      assert MfaConfig.enabled?(config) == true
+    end
+
+    test "returns false when disabled is true" do
+      config = %MfaConfig{disabled: true}
+      assert MfaConfig.enabled?(config) == false
+    end
+  end
+end
+
+defmodule AshPhoenixGenApi.Resource.MfaEntityTest do
+  use ExUnit.Case
+
+  alias AshPhoenixGenApi.Resource.Info
+  alias AshPhoenixGenApi.Resource.MfaConfig
+
+  defmodule MfaTestResource do
+    use Ash.Resource,
+      extensions: [AshPhoenixGenApi.Resource]
+
+    attributes do
+      uuid_primary_key :id
+      attribute :name, :string do
+        public? true
+      end
+    end
+
+    actions do
+      create :create do
+        accept [:name]
+      end
+
+      read :read do
+        primary? true
+      end
+    end
+
+    gen_api do
+      service "test_service"
+      timeout 5_000
+      response_type :async
+      request_info true
+      version "1.0.0"
+
+      action :create do
+        request_type "create_item"
+      end
+
+      action :read do
+        request_type "list_items"
+      end
+
+      mfa :ping do
+        request_type "ping"
+        mfa {MfaTestResource, :ping_handler, []}
+        arg_types %{}
+        timeout 3_000
+      end
+
+      mfa :custom_op do
+        request_type "custom_operation"
+        mfa {MyApp.CustomHandler, :run, [:extra_arg]}
+        arg_types %{"user_id" => :string, "count" => :num}
+        arg_orders ["user_id", "count"]
+        response_type :sync
+        request_info false
+        check_permission {:arg, "user_id"}
+      end
+    end
+
+    def ping_handler(args, request_info) do
+      {:ok, %{args: args, request_info: request_info}}
+    end
+  end
+
+  describe "mfa entity DSL" do
+    test "resource compiles with mfa entities in gen_api section" do
+      assert Ash.Resource.Info.extensions(MfaTestResource)
+             |> Enum.any?(&(&1 == AshPhoenixGenApi.Resource))
+    end
+
+    test "mfas returns all MFA configs" do
+      mfas = Info.mfas(MfaTestResource)
+      assert length(mfas) == 2
+      assert Enum.all?(mfas, &match?(%MfaConfig{}, &1))
+    end
+
+    test "mfa returns specific MFA config by name" do
+      ping = Info.mfa(MfaTestResource, :ping)
+      assert %MfaConfig{} = ping
+      assert ping.name == :ping
+      assert ping.request_type == "ping"
+      assert ping.mfa == {MfaTestResource, :ping_handler, []}
+    end
+
+    test "mfa returns nil for unknown name" do
+      assert Info.mfa(MfaTestResource, :nonexistent) == nil
+    end
+
+    test "enabled_mfas returns only enabled MFA configs" do
+      mfas = Info.enabled_mfas(MfaTestResource)
+      assert length(mfas) == 2
+      assert Enum.all?(mfas, &MfaConfig.enabled?/1)
+    end
+  end
+
+  describe "mfa entity FunConfig generation" do
+    test "fun_configs includes both action and mfa FunConfigs" do
+      fun_configs = Info.fun_configs(MfaTestResource)
+      # 2 actions + 2 mfas = 4
+      assert length(fun_configs) == 4
+    end
+
+    test "mfa FunConfig has correct basic fields" do
+      ping_config = Info.fun_config(MfaTestResource, "ping")
+      assert ping_config != nil
+      assert ping_config.request_type == "ping"
+      assert ping_config.service == "test_service"
+      assert ping_config.mfa == {MfaTestResource, :ping_handler, []}
+      assert ping_config.timeout == 3_000
+    end
+
+    test "mfa FunConfig with empty arg_types has nil arg_types and arg_orders" do
+      ping_config = Info.fun_config(MfaTestResource, "ping")
+      assert ping_config.arg_types == nil
+      assert ping_config.arg_orders == nil
+    end
+
+    test "mfa FunConfig with explicit arg_types and arg_orders" do
+      custom_config = Info.fun_config(MfaTestResource, "custom_operation")
+      assert custom_config != nil
+      assert custom_config.arg_types == %{"user_id" => :string, "count" => :num}
+      assert custom_config.arg_orders == ["user_id", "count"]
+    end
+
+    test "mfa FunConfig inherits section-level defaults" do
+      ping_config = Info.fun_config(MfaTestResource, "ping")
+      # ping only overrides timeout, others come from section defaults
+      assert ping_config.service == "test_service"
+      assert ping_config.response_type == :async
+      assert ping_config.request_info == true
+      assert ping_config.version == "1.0.0"
+    end
+
+    test "mfa FunConfig overrides section-level defaults" do
+      custom_config = Info.fun_config(MfaTestResource, "custom_operation")
+      assert custom_config.response_type == :sync
+      assert custom_config.request_info == false
+    end
+
+    test "mfa FunConfig with check_permission" do
+      custom_config = Info.fun_config(MfaTestResource, "custom_operation")
+      assert custom_config.check_permission == {:arg, "user_id"}
+    end
+
+    test "mfa FunConfig with predefined args in MFA tuple" do
+      custom_config = Info.fun_config(MfaTestResource, "custom_operation")
+      assert custom_config.mfa == {MyApp.CustomHandler, :run, [:extra_arg]}
+    end
+  end
+
+  describe "request_types includes mfa entities" do
+    test "request_types returns types from both actions and mfas" do
+      types = Info.request_types(MfaTestResource)
+      assert "create_item" in types
+      assert "list_items" in types
+      assert "ping" in types
+      assert "custom_operation" in types
+      assert length(types) == 4
+    end
+  end
+
+  describe "action and mfa coexistence" do
+    test "action returns only ActionConfig entities" do
+      alias AshPhoenixGenApi.Resource.ActionConfig
+      action = Info.action(MfaTestResource, :create)
+      assert %ActionConfig{} = action
+    end
+
+    test "mfa returns only MfaConfig entities" do
+      mfa = Info.mfa(MfaTestResource, :ping)
+      assert %MfaConfig{} = mfa
+    end
+
+    test "enabled_actions returns only ActionConfig entities" do
+      alias AshPhoenixGenApi.Resource.ActionConfig
+      actions = Info.enabled_actions(MfaTestResource)
+      assert length(actions) == 2
+      assert Enum.all?(actions, &match?(%ActionConfig{}, &1))
+    end
+
+    test "enabled_mfas returns only MfaConfig entities" do
+      mfas = Info.enabled_mfas(MfaTestResource)
+      assert length(mfas) == 2
+      assert Enum.all?(mfas, &match?(%MfaConfig{}, &1))
+    end
+  end
+end
+
+defmodule AshPhoenixGenApi.Resource.MfaDisabledTest do
+  use ExUnit.Case
+
+  alias AshPhoenixGenApi.Resource.Info
+
+  defmodule DisabledMfaResource do
+    use Ash.Resource,
+      extensions: [AshPhoenixGenApi.Resource]
+
+    attributes do
+      uuid_primary_key :id
+    end
+
+    actions do
+      create :create do
+        accept []
+      end
+    end
+
+    gen_api do
+      service "test_service"
+
+      action :create do
+        request_type "create_item"
+      end
+
+      mfa :active_mfa do
+        request_type "active_mfa"
+        mfa {SomeModule, :handler, []}
+        arg_types %{}
+      end
+
+      mfa :disabled_mfa do
+        request_type "disabled_mfa"
+        mfa {SomeModule, :handler, []}
+        arg_types %{}
+        disabled true
+      end
+    end
+  end
+
+  test "enabled_mfas excludes disabled mfas" do
+    mfas = Info.enabled_mfas(DisabledMfaResource)
+    assert length(mfas) == 1
+    assert hd(mfas).name == :active_mfa
+  end
+
+  test "fun_configs excludes disabled mfas" do
+    fun_configs = Info.fun_configs(DisabledMfaResource)
+    request_types = Enum.map(fun_configs, & &1.request_type)
+    assert "active_mfa" in request_types
+    refute "disabled_mfa" in request_types
+  end
+
+  test "request_types excludes disabled mfas" do
+    types = Info.request_types(DisabledMfaResource)
+    assert "active_mfa" in types
+    refute "disabled_mfa" in types
+  end
+end
+
+defmodule AshPhoenixGenApi.Resource.MfaWithMapArgsTest do
+  use ExUnit.Case
+
+  alias AshPhoenixGenApi.Resource.Info
+
+  defmodule MapArgsResource do
+    use Ash.Resource,
+      extensions: [AshPhoenixGenApi.Resource]
+
+    attributes do
+      uuid_primary_key :id
+    end
+
+    actions do
+      create :create do
+        accept []
+      end
+    end
+
+    gen_api do
+      service "test_service"
+
+      action :create do
+        request_type "create_item"
+      end
+
+      mfa :search do
+        request_type "search"
+        mfa {SearchHandler, :search, []}
+        arg_types %{"query" => :string, "limit" => :num}
+        # arg_orders defaults to :map
+      end
+    end
+  end
+
+  test "mfa with arg_orders :map (default) passes args as map" do
+    search_config = Info.fun_config(MapArgsResource, "search")
+    assert search_config.arg_types == %{"query" => :string, "limit" => :num}
+    assert search_config.arg_orders == :map
+  end
+end
+
+defmodule AshPhoenixGenApi.Resource.MfaMinimalTest do
+  use ExUnit.Case
+
+  alias AshPhoenixGenApi.Resource.Info
+
+  defmodule MinimalMfaResource do
+    use Ash.Resource,
+      extensions: [AshPhoenixGenApi.Resource]
+
+    attributes do
+      uuid_primary_key :id
+    end
+
+    actions do
+      create :create do
+        accept []
+      end
+    end
+
+    gen_api do
+      service "test_service"
+
+      mfa :health_check do
+        request_type "health_check"
+        mfa {HealthChecker, :check, []}
+        arg_types %{}
+      end
+    end
+  end
+
+  test "minimal mfa config with empty arg_types" do
+    config = Info.fun_config(MinimalMfaResource, "health_check")
+    assert config != nil
+    assert config.request_type == "health_check"
+    assert config.mfa == {HealthChecker, :check, []}
+    assert config.arg_types == nil
+    assert config.arg_orders == nil
+  end
+
+  test "minimal mfa uses section-level defaults" do
+    config = Info.fun_config(MinimalMfaResource, "health_check")
+    assert config.service == "test_service"
+    assert config.timeout == 5_000
+    assert config.response_type == :async
+    assert config.request_info == true
+    assert config.version == "0.0.1"
+    assert config.check_permission == false
+  end
+end
+
+defmodule AshPhoenixGenApi.Domain.MfaAggregationTest do
+  use ExUnit.Case
+
+  alias AshPhoenixGenApi.Domain.Info
+
+  defmodule MfaAggResource do
+    use Ash.Resource,
+      domain: AshPhoenixGenApi.Domain.MfaAggregationTest.MfaAggDomain,
+      extensions: [AshPhoenixGenApi.Resource]
+
+    attributes do
+      uuid_primary_key :id
+      attribute :name, :string do
+        public? true
+      end
+    end
+
+    actions do
+      create :create do
+        accept [:name]
+      end
+    end
+
+    gen_api do
+      service "agg_service"
+
+      action :create do
+        request_type "create_item"
+      end
+
+      mfa :ping do
+        request_type "ping"
+        mfa {MfaAggResource, :ping_handler, []}
+        arg_types %{}
+      end
+    end
+
+    def ping_handler(_args, _request_info) do
+      {:ok, :pong}
+    end
+  end
+
+  defmodule MfaAggDomain do
+    use Ash.Domain,
+      extensions: [AshPhoenixGenApi.Domain]
+
+    gen_api do
+      service "agg_service"
+      supporter_module AshPhoenixGenApi.Domain.MfaAggregationTest.MfaAggSupporter
+      version "1.0.0"
+    end
+
+    resources do
+      resource MfaAggResource
+    end
+  end
+
+  describe "domain supporter aggregates MFA FunConfigs" do
+    test "fun_configs includes both action and mfa endpoints" do
+      supporter = AshPhoenixGenApi.Domain.MfaAggregationTest.MfaAggSupporter
+      configs = supporter.fun_configs()
+      request_types = Enum.map(configs, & &1.request_type)
+
+      assert "create_item" in request_types
+      assert "ping" in request_types
+      assert length(configs) == 2
+    end
+
+    test "list_request_types includes mfa request types" do
+      supporter = AshPhoenixGenApi.Domain.MfaAggregationTest.MfaAggSupporter
+      types = supporter.list_request_types()
+
+      assert "create_item" in types
+      assert "ping" in types
+    end
+
+    test "get_fun_config finds mfa endpoint by request_type" do
+      supporter = AshPhoenixGenApi.Domain.MfaAggregationTest.MfaAggSupporter
+      config = supporter.get_fun_config("ping")
+
+      assert config != nil
+      assert config.request_type == "ping"
+      assert config.mfa == {MfaAggResource, :ping_handler, []}
+    end
+
+    test "domain Info.fun_configs includes mfa endpoints" do
+      configs = Info.fun_configs(MfaAggDomain)
+      request_types = Enum.map(configs, & &1.request_type)
+
+      assert "create_item" in request_types
+      assert "ping" in request_types
+    end
+
+    test "domain Info.all_request_types includes mfa request types" do
+      types = Info.all_request_types(MfaAggDomain)
+
+      assert "create_item" in types
+      assert "ping" in types
+    end
+  end
+end
+
+defmodule AshPhoenixGenApi.Resource.MfaVerifierTest do
+  use ExUnit.Case
+
+  alias AshPhoenixGenApi.Resource.MfaConfig
+
+  describe "mfa entity verifier - required fields (validated by Spark at compile time)" do
+    test "raises when mfa entity is missing request_type" do
+      assert_raise Spark.Error.DslError, ~r/required :request_type option not found/, fn ->
+        defmodule MissingRequestTypeResource do
+          use Ash.Resource,
+            extensions: [AshPhoenixGenApi.Resource]
+
+          attributes do
+            uuid_primary_key :id
+          end
+
+          actions do
+            create :create do
+              accept []
+            end
+          end
+
+          gen_api do
+            service "test_service"
+
+            mfa :bad_mfa do
+              mfa {SomeModule, :handler, []}
+              arg_types %{}
+            end
+          end
+        end
+      end
+    end
+
+    test "raises when mfa entity is missing mfa tuple" do
+      assert_raise Spark.Error.DslError, ~r/required :mfa option not found/, fn ->
+        defmodule MissingMfaTupleResource do
+          use Ash.Resource,
+            extensions: [AshPhoenixGenApi.Resource]
+
+          attributes do
+            uuid_primary_key :id
+          end
+
+          actions do
+            create :create do
+              accept []
+            end
+          end
+
+          gen_api do
+            service "test_service"
+
+            mfa :bad_mfa do
+              request_type "bad_mfa"
+              arg_types %{}
+            end
+          end
+        end
+      end
+    end
+
+    test "raises when mfa entity is missing arg_types" do
+      assert_raise Spark.Error.DslError, ~r/required :arg_types option not found/, fn ->
+        defmodule MissingArgTypesResource do
+          use Ash.Resource,
+            extensions: [AshPhoenixGenApi.Resource]
+
+          attributes do
+            uuid_primary_key :id
+          end
+
+          actions do
+            create :create do
+              accept []
+            end
+          end
+
+          gen_api do
+            service "test_service"
+
+            mfa :bad_mfa do
+              request_type "bad_mfa"
+              mfa {SomeModule, :handler, []}
+            end
+          end
+        end
+      end
+    end
+  end
+
+  describe "MfaConfig verifier logic (unit tests)" do
+    test "detects invalid MFA tuple structure" do
+      config = %MfaConfig{
+        name: :bad_mfa,
+        request_type: "bad_mfa",
+        mfa: "not_a_tuple",
+        arg_types: %{}
+      }
+
+      errors = collect_mfa_mfa_errors(config)
+      assert length(errors) == 1
+      assert hd(errors) =~ ~r/invalid MFA tuple/
+    end
+
+    test "detects MFA tuple with non-atom module" do
+      config = %MfaConfig{
+        name: :bad_mfa,
+        request_type: "bad_mfa",
+        mfa: {"not_a_module", :function, []},
+        arg_types: %{}
+      }
+
+      errors = collect_mfa_mfa_errors(config)
+      assert length(errors) == 1
+    end
+
+    test "detects MFA tuple with non-atom function" do
+      config = %MfaConfig{
+        name: :bad_mfa,
+        request_type: "bad_mfa",
+        mfa: {SomeModule, "not_a_function", []},
+        arg_types: %{}
+      }
+
+      errors = collect_mfa_mfa_errors(config)
+      assert length(errors) == 1
+    end
+
+    test "detects MFA tuple with non-list args" do
+      config = %MfaConfig{
+        name: :bad_mfa,
+        request_type: "bad_mfa",
+        mfa: {SomeModule, :function, "not_a_list"},
+        arg_types: %{}
+      }
+
+      errors = collect_mfa_mfa_errors(config)
+      assert length(errors) == 1
+    end
+
+    test "valid MFA tuple produces no errors" do
+      config = %MfaConfig{
+        name: :good_mfa,
+        request_type: "good_mfa",
+        mfa: {SomeModule, :handler, []},
+        arg_types: %{}
+      }
+
+      errors = collect_mfa_mfa_errors(config)
+      assert errors == []
+    end
+
+    test "detects arg_orders with keys missing from arg_types" do
+      config = %MfaConfig{
+        name: :bad_args,
+        request_type: "bad_args",
+        mfa: {SomeModule, :handler, []},
+        arg_types: %{"user_id" => :string},
+        arg_orders: ["user_id", "extra_field"]
+      }
+
+      errors = collect_mfa_arg_consistency_errors(config)
+      assert length(errors) == 1
+      assert hd(errors) =~ ~r/arg_orders has keys.*missing from arg_types/
+    end
+
+    test "detects arg_types with keys missing from arg_orders" do
+      config = %MfaConfig{
+        name: :bad_args,
+        request_type: "bad_args",
+        mfa: {SomeModule, :handler, []},
+        arg_types: %{"user_id" => :string, "name" => :string},
+        arg_orders: ["user_id"]
+      }
+
+      errors = collect_mfa_arg_consistency_errors(config)
+      assert length(errors) == 1
+      assert hd(errors) =~ ~r/arg_types has keys.*missing from arg_orders/
+    end
+
+    test "matching arg_types and arg_orders produces no errors" do
+      config = %MfaConfig{
+        name: :good_args,
+        request_type: "good_args",
+        mfa: {SomeModule, :handler, []},
+        arg_types: %{"user_id" => :string, "name" => :string},
+        arg_orders: ["user_id", "name"]
+      }
+
+      errors = collect_mfa_arg_consistency_errors(config)
+      assert errors == []
+    end
+
+    test "arg_orders :map with arg_types produces no errors" do
+      config = %MfaConfig{
+        name: :map_args,
+        request_type: "map_args",
+        mfa: {SomeModule, :handler, []},
+        arg_types: %{"user_id" => :string},
+        arg_orders: :map
+      }
+
+      errors = collect_mfa_arg_consistency_errors(config)
+      assert errors == []
+    end
+
+    test "detects check_permission referencing arg not in arg_types" do
+      config = %MfaConfig{
+        name: :bad_perm,
+        request_type: "bad_perm",
+        mfa: {SomeModule, :handler, []},
+        arg_types: %{"user_id" => :string},
+        check_permission: {:arg, "nonexistent_field"}
+      }
+
+      errors = collect_mfa_permission_arg_errors(config)
+      assert length(errors) == 1
+      assert hd(errors) =~ ~r/check_permission references arg.*not found in arg_types/
+    end
+
+    test "check_permission with valid arg produces no errors" do
+      config = %MfaConfig{
+        name: :good_perm,
+        request_type: "good_perm",
+        mfa: {SomeModule, :handler, []},
+        arg_types: %{"user_id" => :string},
+        check_permission: {:arg, "user_id"}
+      }
+
+      errors = collect_mfa_permission_arg_errors(config)
+      assert errors == []
+    end
+
+    test "detects invalid permission_callback structure" do
+      config = %MfaConfig{
+        name: :bad_callback,
+        request_type: "bad_callback",
+        mfa: {SomeModule, :handler, []},
+        arg_types: %{},
+        permission_callback: "not_a_tuple"
+      }
+
+      errors = collect_mfa_permission_callback_errors(config)
+      assert length(errors) == 1
+      assert hd(errors) =~ ~r/invalid permission_callback/
+    end
+
+    test "valid permission_callback produces no errors" do
+      config = %MfaConfig{
+        name: :good_callback,
+        request_type: "good_callback",
+        mfa: {SomeModule, :handler, []},
+        arg_types: %{},
+        permission_callback: {MyChecker, :check, []}
+      }
+
+      errors = collect_mfa_permission_callback_errors(config)
+      assert errors == []
+    end
+
+    test "nil permission_callback produces no errors" do
+      config = %MfaConfig{
+        name: :nil_callback,
+        request_type: "nil_callback",
+        mfa: {SomeModule, :handler, []},
+        arg_types: %{},
+        permission_callback: nil
+      }
+
+      errors = collect_mfa_permission_callback_errors(config)
+      assert errors == []
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Helper functions that replicate the verifier logic for unit testing
+  # ---------------------------------------------------------------------------
+
+  defp collect_mfa_mfa_errors(mfa_config) do
+    case mfa_config.mfa do
+      {mod, fun, args} when is_atom(mod) and is_atom(fun) and is_list(args) ->
+        []
+
+      mfa ->
+        ["MFA `#{inspect(mfa_config.name)}`: invalid MFA tuple `#{inspect(mfa)}`. " <>
+           "Expected `{module, function, args_list}` where module and function are atoms " <>
+           "and args is a list."]
+    end
+  end
+
+  defp collect_mfa_arg_consistency_errors(mfa_config) do
+    arg_types = mfa_config.arg_types
+    arg_orders = mfa_config.arg_orders
+
+    cond do
+      is_map(arg_types) and map_size(arg_types) > 0 and
+          is_list(arg_orders) and arg_orders != [] ->
+        arg_type_keys = MapSet.new(Map.keys(arg_types))
+        arg_order_keys = MapSet.new(arg_orders)
+
+        missing_in_orders = MapSet.difference(arg_type_keys, arg_order_keys)
+        missing_in_types = MapSet.difference(arg_order_keys, arg_type_keys)
+
+        errors = []
+
+        errors =
+          if MapSet.size(missing_in_orders) > 0 do
+            ["MFA `#{mfa_config.name}`: arg_types has keys " <>
+               "#{inspect(MapSet.to_list(missing_in_orders))} that are missing from arg_orders" | errors]
+          else
+            errors
+          end
+
+        errors =
+          if MapSet.size(missing_in_types) > 0 do
+            ["MFA `#{mfa_config.name}`: arg_orders has keys " <>
+               "#{inspect(MapSet.to_list(missing_in_types))} that are missing from arg_types" | errors]
+          else
+            errors
+          end
+
+        errors
+
+      is_map(arg_types) and map_size(arg_types) > 0 ->
+        []
+
+      true ->
+        []
+    end
+  end
+
+  defp collect_mfa_permission_arg_errors(mfa_config) do
+    case mfa_config.check_permission do
+      {:arg, arg_name} when is_binary(arg_name) ->
+        if is_map(mfa_config.arg_types) and Map.has_key?(mfa_config.arg_types, arg_name) do
+          []
+        else
+          ["MFA `#{mfa_config.name}`: check_permission references arg " <>
+             "`#{inspect(arg_name)}` but it is not found in arg_types"]
+        end
+
+      _ ->
+        []
+    end
+  end
+
+  defp collect_mfa_permission_callback_errors(mfa_config) do
+    case mfa_config.permission_callback do
+      nil ->
+        []
+
+      {mod, fun, args} when is_atom(mod) and is_atom(fun) and is_list(args) ->
+        []
+
+      permission_callback ->
+        ["MFA `#{mfa_config.name}`: invalid permission_callback `#{inspect(permission_callback)}`. " <>
+           "Expected `{Module, :function, []}` where Module and function are atoms " <>
+           "and args is a list, or `nil`."]
+    end
+  end
+end

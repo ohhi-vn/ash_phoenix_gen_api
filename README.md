@@ -227,6 +227,51 @@ The `gen_api` section is added to Ash resources when using `AshPhoenixGenApi.Res
 | `disabled` | `:boolean` | `false` | Disable this endpoint |
 | `code_interface?` | `:boolean \| nil` | `nil` | Whether to generate code interface for this action. `nil` inherits from section-level |
 
+#### MFA Entity Options
+
+The `mfa` entity defines a standalone PhoenixGenApi endpoint that calls an arbitrary MFA function directly — with no Ash action involved. This is useful for utility endpoints, batch operations, or service-to-service calls that don't map to standard Ash CRUD actions.
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `name` | `:atom` | **required** | Unique identifier for this MFA endpoint |
+| `request_type` | `:string` | **required** | PhoenixGenApi request type string |
+| `mfa` | `{module, atom, list}` | **required** | MFA tuple to call. Function receives `predefined_args ++ converted_args ++ info_args` |
+| `arg_types` | `map` | **required** | Argument types map. Use `%{}` for no arguments. No auto-derivation |
+| `arg_orders` | `[string] \| :map` | `:map` | Argument order. `:map` passes args as a map; a list passes positional args |
+| `timeout` | `pos_integer \| :infinity` | section default | Timeout in milliseconds |
+| `response_type` | `:sync \| :async \| :stream \| :none` | section default | Response mode |
+| `request_info` | `:boolean` | section default | Whether to pass request info |
+| `check_permission` | see above | section default | Permission check mode |
+| `permission_callback` | `{module, atom, list} \| nil` | section default | Permission callback MFA. Overrides `check_permission` when set |
+| `choose_node_mode` | see above | section default | Node selection strategy |
+| `nodes` | see above | section default | Target nodes |
+| `retry` | see above | section default | Retry configuration |
+| `version` | `:string` | section default | API version string |
+| `disabled` | `:boolean` | `false` | Disable this endpoint |
+
+Example:
+
+```elixir
+gen_api do
+  service "chat"
+
+  mfa :ping do
+    request_type "ping"
+    mfa {MyApp.Chat.Api, :ping, []}
+    arg_types %{}
+    timeout 1_000
+  end
+
+  mfa :search do
+    request_type "search"
+    mfa {MyApp.SearchHandler, :search, []}
+    arg_types %{"query" => :string, "limit" => :num}
+    arg_orders ["query", "limit"]
+    response_type :sync
+  end
+end
+```
+
 ### Domain DSL (`gen_api`)
 
 The `gen_api` section is added to Ash domains when using `AshPhoenixGenApi.Domain`.
@@ -376,9 +421,21 @@ AshPhoenixGenApi.Resource.Info.fun_configs(MyApp.Chat.DirectMessage)
 AshPhoenixGenApi.Resource.Info.fun_config(MyApp.Chat.DirectMessage, "send_direct_message")
 #=> %PhoenixGenApi.Structs.FunConfig{request_type: "send_direct_message", ...}
 
-# Get all request types
+# Get all request types (includes both action and mfa endpoints)
 AshPhoenixGenApi.Resource.Info.request_types(MyApp.Chat.DirectMessage)
-#=> ["send_direct_message", "get_conversation", ...]
+#=> ["send_direct_message", "get_conversation", ..., "ping"]
+
+# Get all MFA configs
+AshPhoenixGenApi.Resource.Info.mfas(MyApp.Chat.DirectMessage)
+#=> [%MfaConfig{name: :ping, ...}, ...]
+
+# Get a specific MFA config by name
+AshPhoenixGenApi.Resource.Info.mfa(MyApp.Chat.DirectMessage, :ping)
+#=> %MfaConfig{name: :ping, request_type: "ping", mfa: {MyApp.Chat.Api, :ping, []}, ...}
+
+# Get only enabled MFA configs
+AshPhoenixGenApi.Resource.Info.enabled_mfas(MyApp.Chat.DirectMessage)
+#=> [%MfaConfig{name: :ping, disabled: false, ...}, ...]
 
 # Get effective values with fallback resolution
 AshPhoenixGenApi.Resource.Info.effective_timeout(MyApp.Chat.DirectMessage, :create)
@@ -431,10 +488,12 @@ The extension performs compile-time verification to catch configuration errors e
 ### Resource Verification
 
 - **Action existence** — Every `action` entity must reference an existing Ash action
-- **Request type uniqueness** — No two actions in the same resource may share a `request_type`
+- **MFA required fields** — Every `mfa` entity must have `request_type`, `mfa`, and `arg_types` set
+- **MFA tuple validity** — The `mfa` field must be a valid `{module, function, args_list}` tuple
+- **Request type uniqueness** — No two endpoints (actions or mfas) in the same resource may share a `request_type`
 - **Arg consistency** — When both `arg_types` and `arg_orders` are provided, their keys must match
-- **Permission arg existence** — When `check_permission` is `{:arg, "name"}`, the argument must exist
-- **MFA validity** — When an explicit `mfa` is provided, it must be a valid `{module, function, args}` tuple
+- **Permission arg existence** — When `check_permission` is `{:arg, "name"}`, the argument must exist in `arg_types` (for `mfa` entities) or the Ash action (for `action` entities)
+- **Action MFA validity** — When an explicit `mfa` is provided on an `action` entity, it must be a valid `{module, function, args}` tuple
 
 ### Domain Verification
 
@@ -613,6 +672,14 @@ defmodule MyApp.Chat.DirectMessage do
 
     action :mark_read do
       request_type "mark_direct_messages_as_read"
+    end
+
+    # Standalone MFA endpoint — no Ash action needed
+    mfa :typing_indicator do
+      request_type "typing_indicator"
+      mfa {MyApp.Chat.Api, :broadcast_typing, []}
+      arg_types %{"conversation_id" => :string}
+      response_type :none
     end
   end
 end

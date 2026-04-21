@@ -137,6 +137,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
 
   alias AshPhoenixGenApi.Resource.Info
   alias AshPhoenixGenApi.Resource.ActionConfig
+  alias AshPhoenixGenApi.Resource.MfaConfig
   alias AshPhoenixGenApi.TypeMapper
 
   @doc """
@@ -154,9 +155,13 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
   @impl true
   def transform(dsl_state) do
     resource = Spark.Dsl.Transformer.get_persisted(dsl_state, :module)
-    actions = Info.gen_api(dsl_state)
+    entities = Info.gen_api(dsl_state)
 
-    if actions == [] do
+    # Separate action and mfa entities by struct type
+    actions = Enum.filter(entities, &match?(%ActionConfig{}, &1))
+    mfas = Enum.filter(entities, &match?(%MfaConfig{}, &1))
+
+    if entities == [] do
       # No gen_api actions configured — define empty function for safe introspection
       dsl_state =
         Spark.Dsl.Transformer.eval(
@@ -175,13 +180,21 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
       section_defaults = extract_section_defaults(dsl_state)
       section_code_interface? = extract_opt(Info.gen_api_code_interface?(dsl_state), true)
 
-      fun_configs =
+      action_fun_configs =
         actions
         |> Enum.filter(&ActionConfig.enabled?/1)
         |> Enum.map(fn action_config ->
           build_fun_config(action_config, resource, dsl_state, section_defaults)
         end)
 
+      mfa_fun_configs =
+        mfas
+        |> Enum.filter(&MfaConfig.enabled?/1)
+        |> Enum.map(fn mfa_config ->
+          build_mfa_fun_config(mfa_config, section_defaults)
+        end)
+
+      fun_configs = action_fun_configs ++ mfa_fun_configs
       fun_configs_escaped = Macro.escape(fun_configs)
 
       # Build code interface function definitions for enabled actions
@@ -280,6 +293,63 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
       request_info: request_info,
       version: version,
       disabled: action_config.disabled,
+      retry: retry
+    }
+  end
+
+  # Builds a FunConfig from an MfaConfig entity.
+  #
+  # Unlike action configs, mfa configs have no Ash action to auto-derive from.
+  # The `request_type`, `mfa`, and `arg_types` are all explicitly provided.
+  # `arg_orders` defaults to `:map` (passing args as a map with string keys).
+  defp build_mfa_fun_config(mfa_config, section_defaults) do
+    request_type = mfa_config.request_type
+    timeout = MfaConfig.effective_timeout(mfa_config, section_defaults.timeout)
+    response_type = MfaConfig.effective_response_type(mfa_config, section_defaults.response_type)
+    request_info = MfaConfig.effective_request_info(mfa_config, section_defaults.request_info)
+    permission_callback = MfaConfig.effective_permission_callback(mfa_config, section_defaults.permission_callback)
+    choose_node_mode = MfaConfig.effective_choose_node_mode(mfa_config, section_defaults.choose_node_mode)
+    nodes = MfaConfig.effective_nodes(mfa_config, section_defaults.nodes)
+    version = MfaConfig.effective_version(mfa_config, section_defaults.version)
+    retry = MfaConfig.effective_retry(mfa_config, section_defaults.retry)
+
+    # Resolve check_permission with permission_callback taking precedence.
+    check_permission =
+      if permission_callback do
+        {:callback, permission_callback}
+      else
+        MfaConfig.effective_check_permission(mfa_config, section_defaults.check_permission)
+      end
+
+    # For mfa entities, arg_types and arg_orders are explicitly provided
+    # (no auto-derivation from Ash actions). Normalize empty arg_types
+    # to nil for FunConfig compatibility.
+    {arg_types, arg_orders} =
+      case mfa_config.arg_types do
+        types when is_map(types) and map_size(types) == 0 ->
+          {nil, nil}
+
+        types when is_map(types) and map_size(types) > 0 ->
+          {types, mfa_config.arg_orders}
+
+        nil ->
+          {nil, nil}
+      end
+
+    %PhoenixGenApi.Structs.FunConfig{
+      request_type: request_type,
+      service: section_defaults.service,
+      nodes: nodes,
+      choose_node_mode: choose_node_mode,
+      timeout: timeout,
+      mfa: mfa_config.mfa,
+      arg_types: arg_types,
+      arg_orders: arg_orders,
+      response_type: response_type,
+      check_permission: check_permission,
+      request_info: request_info,
+      version: version,
+      disabled: mfa_config.disabled,
       retry: retry
     }
   end
