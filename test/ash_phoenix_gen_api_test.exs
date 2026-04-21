@@ -92,12 +92,12 @@ defmodule AshPhoenixGenApi.TypeMapperTest do
   end
 
   describe "to_gen_api_type/1 - boolean type" do
-    test "maps :boolean to :string" do
-      assert TypeMapper.to_gen_api_type(:boolean) == :string
+    test "maps :boolean to :boolean" do
+      assert TypeMapper.to_gen_api_type(:boolean) == :boolean
     end
 
-    test "maps Ash.Type.Boolean to :string" do
-      assert TypeMapper.to_gen_api_type(Ash.Type.Boolean) == :string
+    test "maps Ash.Type.Boolean to :boolean" do
+      assert TypeMapper.to_gen_api_type(Ash.Type.Boolean) == :boolean
     end
   end
 

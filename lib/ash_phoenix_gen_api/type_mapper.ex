@@ -17,7 +17,7 @@ defmodule AshPhoenixGenApi.TypeMapper do
   | `:integer` / `Ash.Type.Integer` | `:num` |
   | `:float` / `Ash.Type.Float` | `:num` |
   | `:decimal` / `Ash.Type.Decimal` | `:num` |
-  | `:boolean` / `Ash.Type.Boolean` | `:string` |
+  | `:boolean` / `Ash.Type.Boolean` | `:boolean` |
   | `:uuid` / `Ash.Type.UUID` | `:string` |
   | `:uuid_v7` / `Ash.Type.UUIDv7` | `:string` |
   | `:date` / `Ash.Type.Date` | `:string` |
@@ -118,8 +118,8 @@ defmodule AshPhoenixGenApi.TypeMapper do
   def to_gen_api_type(Ash.Type.DurationName, _constraints), do: :string
 
   # Boolean - serialized as string ("true"/"false")
-  def to_gen_api_type(:boolean, _constraints), do: :string
-  def to_gen_api_type(Ash.Type.Boolean, _constraints), do: :string
+  def to_gen_api_type(:boolean, _constraints), do: :boolean
+  def to_gen_api_type(Ash.Type.Boolean, _constraints), do: :boolean
 
   # Atom - serialized as string
   def to_gen_api_type(:atom, _constraints), do: :string
