@@ -267,6 +267,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineDomainSupporter do
                   unquote(domain_escaped)
                   |> Ash.Domain.Info.resources()
                   |> Enum.filter(fn resource ->
+                    Code.ensure_loaded(resource)
                     function_exported?(resource, :__ash_phoenix_gen_api_fun_configs__, 0)
                   end)
                   |> Enum.flat_map(fn resource ->

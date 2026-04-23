@@ -5,25 +5,7 @@ defmodule AshPhoenixGenApi.Resource.Info do
   Use this module to query the PhoenixGenApi configuration of an Ash resource
   at runtime or during compilation.
 
-  ## Generated Functions
-
-  Using `Spark.InfoGenerator` automatically generates accessor functions for
-  all options in the `gen_api` section:
-
-  - `gen_api_service/1` - Returns the service name
-  - `gen_api_nodes/1` - Returns the default nodes configuration
-  - `gen_api_choose_node_mode/1` - Returns the default node selection strategy
-  - `gen_api_timeout/1` - Returns the default timeout
-  - `gen_api_response_type/1` - Returns the default response type
-  - `gen_api_request_info/1` - Returns the default request_info setting
-  - `gen_api_check_permission/1` - Returns the default permission check mode
-  - `gen_api_permission_callback/1` - Returns the default permission callback MFA
-  - `gen_api_version/1` - Returns the default version string
-  - `gen_api_retry/1` - Returns the default retry configuration
-  - `gen_api_code_interface?/1` - Returns whether code interface generation is enabled at section level
-  - `gen_api/1` - Returns the list of action entities
-
-  ## Additional Helpers
+  ## Helpers
 
   This module also provides convenience functions:
 
@@ -32,28 +14,6 @@ defmodule AshPhoenixGenApi.Resource.Info do
   - `action_request_type/2` - Get the effective request_type for an action
   - `fun_configs/1` - Get the list of generated FunConfig structs
   - `has_gen_api?/1` - Check if a resource has gen_api configured
-
-  ## Usage
-
-      # Get the service name for a resource
-      AshPhoenixGenApi.Resource.Info.gen_api_service(MyApp.Chat.DirectMessage)
-      #=> "chat"
-
-      # Get all action configs
-      AshPhoenixGenApi.Resource.Info.gen_api(MyApp.Chat.DirectMessage)
-      #=> [%ActionConfig{name: :send_direct_message, ...}, ...]
-
-      # Get a specific action config
-      AshPhoenixGenApi.Resource.Info.action(MyApp.Chat.DirectMessage, :send_direct_message)
-      #=> %ActionConfig{name: :send_direct_message, ...}
-
-      # Get only enabled actions
-      AshPhoenixGenApi.Resource.Info.enabled_actions(MyApp.Chat.DirectMessage)
-      #=> [%ActionConfig{name: :send_direct_message, disabled: false, ...}, ...]
-
-      # Get the generated FunConfig structs (after compilation)
-      AshPhoenixGenApi.Resource.Info.fun_configs(MyApp.Chat.DirectMessage)
-      #=> [%PhoenixGenApi.Structs.FunConfig{...}, ...]
   """
 
   use Spark.InfoGenerator, extension: AshPhoenixGenApi.Resource, sections: [:gen_api]
@@ -199,7 +159,8 @@ defmodule AshPhoenixGenApi.Resource.Info do
       "send_msg"
   """
   @spec action_request_type(module(), atom()) :: String.t() | nil
-  def action_request_type(resource, action_name) when is_atom(resource) and is_atom(action_name) do
+  def action_request_type(resource, action_name)
+      when is_atom(resource) and is_atom(action_name) do
     case action(resource, action_name) do
       nil -> nil
       action_config -> ActionConfig.effective_request_type(action_config)
@@ -319,18 +280,6 @@ defmodule AshPhoenixGenApi.Resource.Info do
   # Private helpers
   # ---------------------------------------------------------------------------
 
-  # Extracts a value from a Spark.InfoGenerator result.
-  #
-  # Spark.InfoGenerator generates two versions of each accessor:
-  # - `gen_api_foo/1` returns `{:ok, value}` or `:error`
-  # - `gen_api_foo!/1` returns the value or raises
-  #
-  # This helper unwraps the `{:ok, value}` tuple, falling back to the
-  # provided default when the option is not configured (`:error`).
-  defp extract_opt({:ok, value}, _default), do: value
-  defp extract_opt(:error, default), do: default
-  defp extract_opt(value, _default) when not is_tuple(value), do: value
-
   @doc """
   Gets the effective service name for a resource.
 
@@ -349,7 +298,7 @@ defmodule AshPhoenixGenApi.Resource.Info do
   @spec service(module()) :: String.t() | atom() | nil
   def service(resource) when is_atom(resource) do
     if has_gen_api?(resource) do
-      extract_opt(gen_api_service(resource), nil)
+      AshPhoenixGenApi.extract_spark_opt(gen_api_service(resource), nil)
     else
       nil
     end
@@ -377,7 +326,7 @@ defmodule AshPhoenixGenApi.Resource.Info do
   """
   @spec effective_timeout(module(), atom()) :: pos_integer() | :infinity
   def effective_timeout(resource, action_name) when is_atom(resource) and is_atom(action_name) do
-    section_default = extract_opt(gen_api_timeout(resource), 5_000)
+    section_default = AshPhoenixGenApi.extract_spark_opt(gen_api_timeout(resource), 5_000)
     action_config = action(resource, action_name)
 
     case action_config do
@@ -395,8 +344,9 @@ defmodule AshPhoenixGenApi.Resource.Info do
     - `action_name` - The action name atom
   """
   @spec effective_response_type(module(), atom()) :: :sync | :async | :stream | :none
-  def effective_response_type(resource, action_name) when is_atom(resource) and is_atom(action_name) do
-    section_default = extract_opt(gen_api_response_type(resource), :async)
+  def effective_response_type(resource, action_name)
+      when is_atom(resource) and is_atom(action_name) do
+    section_default = AshPhoenixGenApi.extract_spark_opt(gen_api_response_type(resource), :async)
     action_config = action(resource, action_name)
 
     case action_config do
@@ -414,8 +364,9 @@ defmodule AshPhoenixGenApi.Resource.Info do
     - `action_name` - The action name atom
   """
   @spec effective_request_info(module(), atom()) :: boolean()
-  def effective_request_info(resource, action_name) when is_atom(resource) and is_atom(action_name) do
-    section_default = extract_opt(gen_api_request_info(resource), true)
+  def effective_request_info(resource, action_name)
+      when is_atom(resource) and is_atom(action_name) do
+    section_default = AshPhoenixGenApi.extract_spark_opt(gen_api_request_info(resource), true)
     action_config = action(resource, action_name)
 
     case action_config do
@@ -433,8 +384,11 @@ defmodule AshPhoenixGenApi.Resource.Info do
     - `action_name` - The action name atom
   """
   @spec effective_check_permission(module(), atom()) :: ActionConfig.permission_mode()
-  def effective_check_permission(resource, action_name) when is_atom(resource) and is_atom(action_name) do
-    section_default = extract_opt(gen_api_check_permission(resource), false)
+  def effective_check_permission(resource, action_name)
+      when is_atom(resource) and is_atom(action_name) do
+    section_default =
+      AshPhoenixGenApi.extract_spark_opt(gen_api_check_permission(resource), false)
+
     action_config = action(resource, action_name)
 
     case action_config do
@@ -468,8 +422,11 @@ defmodule AshPhoenixGenApi.Resource.Info do
       {MyApp.Permissions, :check_admin, []}
   """
   @spec effective_permission_callback(module(), atom()) :: ActionConfig.permission_callback()
-  def effective_permission_callback(resource, action_name) when is_atom(resource) and is_atom(action_name) do
-    section_default = extract_opt(gen_api_permission_callback(resource), nil)
+  def effective_permission_callback(resource, action_name)
+      when is_atom(resource) and is_atom(action_name) do
+    section_default =
+      AshPhoenixGenApi.extract_spark_opt(gen_api_permission_callback(resource), nil)
+
     action_config = action(resource, action_name)
 
     case action_config do
@@ -487,8 +444,11 @@ defmodule AshPhoenixGenApi.Resource.Info do
     - `action_name` - The action name atom
   """
   @spec effective_choose_node_mode(module(), atom()) :: ActionConfig.choose_node_mode()
-  def effective_choose_node_mode(resource, action_name) when is_atom(resource) and is_atom(action_name) do
-    section_default = extract_opt(gen_api_choose_node_mode(resource), :random)
+  def effective_choose_node_mode(resource, action_name)
+      when is_atom(resource) and is_atom(action_name) do
+    section_default =
+      AshPhoenixGenApi.extract_spark_opt(gen_api_choose_node_mode(resource), :random)
+
     action_config = action(resource, action_name)
 
     case action_config do
@@ -507,7 +467,7 @@ defmodule AshPhoenixGenApi.Resource.Info do
   """
   @spec effective_nodes(module(), atom()) :: ActionConfig.node_config()
   def effective_nodes(resource, action_name) when is_atom(resource) and is_atom(action_name) do
-    section_default = extract_opt(gen_api_nodes(resource), :local)
+    section_default = AshPhoenixGenApi.extract_spark_opt(gen_api_nodes(resource), :local)
     action_config = action(resource, action_name)
 
     case action_config do
@@ -526,7 +486,7 @@ defmodule AshPhoenixGenApi.Resource.Info do
   """
   @spec effective_version(module(), atom()) :: String.t()
   def effective_version(resource, action_name) when is_atom(resource) and is_atom(action_name) do
-    section_default = extract_opt(gen_api_version(resource), "0.0.1")
+    section_default = AshPhoenixGenApi.extract_spark_opt(gen_api_version(resource), "0.0.1")
     action_config = action(resource, action_name)
 
     case action_config do
@@ -545,7 +505,7 @@ defmodule AshPhoenixGenApi.Resource.Info do
   """
   @spec effective_retry(module(), atom()) :: ActionConfig.retry_config()
   def effective_retry(resource, action_name) when is_atom(resource) and is_atom(action_name) do
-    section_default = extract_opt(gen_api_retry(resource), nil)
+    section_default = AshPhoenixGenApi.extract_spark_opt(gen_api_retry(resource), nil)
     action_config = action(resource, action_name)
 
     case action_config do
@@ -573,8 +533,9 @@ defmodule AshPhoenixGenApi.Resource.Info do
       true
   """
   @spec effective_code_interface?(module(), atom()) :: boolean()
-  def effective_code_interface?(resource, action_name) when is_atom(resource) and is_atom(action_name) do
-    section_default = extract_opt(gen_api_code_interface?(resource), true)
+  def effective_code_interface?(resource, action_name)
+      when is_atom(resource) and is_atom(action_name) do
+    section_default = AshPhoenixGenApi.extract_spark_opt(gen_api_code_interface?(resource), true)
     action_config = action(resource, action_name)
 
     case action_config do
@@ -635,8 +596,11 @@ defmodule AshPhoenixGenApi.Resource.Info do
       :map
   """
   @spec effective_result_encoder(module(), atom()) :: ActionConfig.result_encoder()
-  def effective_result_encoder(resource, action_name) when is_atom(resource) and is_atom(action_name) do
-    section_default = extract_opt(gen_api_result_encoder(resource), :struct)
+  def effective_result_encoder(resource, action_name)
+      when is_atom(resource) and is_atom(action_name) do
+    section_default =
+      AshPhoenixGenApi.extract_spark_opt(gen_api_result_encoder(resource), :struct)
+
     action_config = action(resource, action_name)
 
     case action_config do

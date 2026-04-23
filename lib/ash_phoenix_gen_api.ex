@@ -381,6 +381,13 @@ defmodule AshPhoenixGenApi do
   - `AshPhoenixGenApi.Verifiers.VerifyDomainConfig` — Domain verifier
   """
 
+  @doc false
+  def extract_spark_opt({:ok, value}, _default), do: value
+
+  def extract_spark_opt(:error, default), do: default
+
+  def extract_spark_opt(value, _default) when not is_tuple(value), do: value
+
   @doc """
   Lists all modules that are part of the AshPhoenixGenApi extension.
 

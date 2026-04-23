@@ -56,6 +56,8 @@ defmodule AshPhoenixGenApi.Domain.Info do
 
   alias AshPhoenixGenApi.Resource.Info, as: ResourceInfo
 
+  import AshPhoenixGenApi, only: [extract_spark_opt: 2]
+
   @doc """
   Checks if a domain has the gen_api extension configured.
 
@@ -100,7 +102,7 @@ defmodule AshPhoenixGenApi.Domain.Info do
   @spec supporter_module(module()) :: module() | nil
   def supporter_module(domain) when is_atom(domain) do
     if has_gen_api?(domain) do
-      extract_opt(gen_api_supporter_module(domain), nil)
+      extract_spark_opt(gen_api_supporter_module(domain), nil)
     else
       nil
     end
@@ -126,7 +128,7 @@ defmodule AshPhoenixGenApi.Domain.Info do
   @spec service(module()) :: String.t() | atom() | nil
   def service(domain) when is_atom(domain) do
     if has_gen_api?(domain) do
-      extract_opt(gen_api_service(domain), nil)
+      extract_spark_opt(gen_api_service(domain), nil)
     else
       nil
     end
@@ -260,7 +262,7 @@ defmodule AshPhoenixGenApi.Domain.Info do
   @spec version(module()) :: String.t()
   def version(domain) when is_atom(domain) do
     if has_gen_api?(domain) do
-      extract_opt(gen_api_version(domain), "0.0.1")
+      extract_spark_opt(gen_api_version(domain), "0.0.1")
     else
       "0.0.1"
     end
@@ -286,7 +288,7 @@ defmodule AshPhoenixGenApi.Domain.Info do
   @spec define_supporter?(module()) :: boolean()
   def define_supporter?(domain) when is_atom(domain) do
     if has_gen_api?(domain) do
-      extract_opt(gen_api_define_supporter?(domain), true)
+      extract_spark_opt(gen_api_define_supporter?(domain), true)
     else
       false
     end
@@ -312,7 +314,7 @@ defmodule AshPhoenixGenApi.Domain.Info do
   @spec timeout(module()) :: pos_integer() | :infinity
   def timeout(domain) when is_atom(domain) do
     if has_gen_api?(domain) do
-      extract_opt(gen_api_timeout(domain), 5_000)
+      extract_spark_opt(gen_api_timeout(domain), 5_000)
     else
       5_000
     end
@@ -338,7 +340,7 @@ defmodule AshPhoenixGenApi.Domain.Info do
   @spec response_type(module()) :: :sync | :async | :stream | :none
   def response_type(domain) when is_atom(domain) do
     if has_gen_api?(domain) do
-      extract_opt(gen_api_response_type(domain), :async)
+      extract_spark_opt(gen_api_response_type(domain), :async)
     else
       :async
     end
@@ -364,7 +366,7 @@ defmodule AshPhoenixGenApi.Domain.Info do
   @spec request_info(module()) :: boolean()
   def request_info(domain) when is_atom(domain) do
     if has_gen_api?(domain) do
-      extract_opt(gen_api_request_info(domain), true)
+      extract_spark_opt(gen_api_request_info(domain), true)
     else
       true
     end
@@ -390,7 +392,7 @@ defmodule AshPhoenixGenApi.Domain.Info do
   @spec nodes(module()) :: [atom()] | {module(), atom(), [any()]} | :local
   def nodes(domain) when is_atom(domain) do
     if has_gen_api?(domain) do
-      extract_opt(gen_api_nodes(domain), :local)
+      extract_spark_opt(gen_api_nodes(domain), :local)
     else
       :local
     end
@@ -416,7 +418,7 @@ defmodule AshPhoenixGenApi.Domain.Info do
   @spec choose_node_mode(module()) :: :random | :hash | {:hash, String.t()} | :round_robin
   def choose_node_mode(domain) when is_atom(domain) do
     if has_gen_api?(domain) do
-      extract_opt(gen_api_choose_node_mode(domain), :random)
+      extract_spark_opt(gen_api_choose_node_mode(domain), :random)
     else
       :random
     end
@@ -443,7 +445,7 @@ defmodule AshPhoenixGenApi.Domain.Info do
           false | :any_authenticated | {:arg, String.t()} | {:role, [String.t()]}
   def check_permission(domain) when is_atom(domain) do
     if has_gen_api?(domain) do
-      extract_opt(gen_api_check_permission(domain), false)
+      extract_spark_opt(gen_api_check_permission(domain), false)
     else
       false
     end
@@ -478,7 +480,7 @@ defmodule AshPhoenixGenApi.Domain.Info do
   @spec permission_callback(module()) :: {module(), atom(), [any()]} | nil
   def permission_callback(domain) when is_atom(domain) do
     if has_gen_api?(domain) do
-      extract_opt(gen_api_permission_callback(domain), nil)
+      extract_spark_opt(gen_api_permission_callback(domain), nil)
     else
       nil
     end
@@ -508,7 +510,7 @@ defmodule AshPhoenixGenApi.Domain.Info do
           | {:all_nodes, pos_integer()}
   def retry(domain) when is_atom(domain) do
     if has_gen_api?(domain) do
-      extract_opt(gen_api_retry(domain), nil)
+      extract_spark_opt(gen_api_retry(domain), nil)
     else
       nil
     end
@@ -542,7 +544,7 @@ defmodule AshPhoenixGenApi.Domain.Info do
   @spec push_nodes(module()) :: [atom()] | {module(), atom(), [any()]} | nil
   def push_nodes(domain) when is_atom(domain) do
     if has_gen_api?(domain) do
-      extract_opt(gen_api_push_nodes(domain), nil)
+      extract_spark_opt(gen_api_push_nodes(domain), nil)
     else
       nil
     end
@@ -568,7 +570,7 @@ defmodule AshPhoenixGenApi.Domain.Info do
   @spec push_on_startup?(module()) :: boolean()
   def push_on_startup?(domain) when is_atom(domain) do
     if has_gen_api?(domain) do
-      extract_opt(gen_api_push_on_startup(domain), false)
+      extract_spark_opt(gen_api_push_on_startup(domain), false)
     else
       false
     end
@@ -652,22 +654,6 @@ defmodule AshPhoenixGenApi.Domain.Info do
   """
   @spec result_encoder(module()) :: :struct | :map | {module(), atom(), [any()]} | nil
   def result_encoder(domain) when is_atom(domain) do
-    extract_opt(gen_api_result_encoder(domain), :struct)
+    extract_spark_opt(gen_api_result_encoder(domain), :struct)
   end
-
-  # ---------------------------------------------------------------------------
-  # Private helpers
-  # ---------------------------------------------------------------------------
-
-  # Extracts a value from a Spark.InfoGenerator result.
-  #
-  # Spark.InfoGenerator generates two versions of each accessor:
-  # - `gen_api_foo/1` returns `{:ok, value}` or `:error`
-  # - `gen_api_foo!/1` returns the value or raises
-  #
-  # This helper unwraps the `{:ok, value}` tuple, falling back to the
-  # provided default when the option is not configured (`:error`).
-  defp extract_opt({:ok, value}, _default), do: value
-  defp extract_opt(:error, default), do: default
-  defp extract_opt(value, _default) when not is_tuple(value), do: value
 end

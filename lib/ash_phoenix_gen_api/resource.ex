@@ -265,7 +265,7 @@ defmodule AshPhoenixGenApi.Resource do
         """
       ],
       code_interface?: [
-        type: {:or, [:boolean, :nil]},
+        type: {:or, [:boolean, nil]},
         default: nil,
         doc: """
         Whether to generate a code interface function for this specific action.
@@ -524,14 +524,14 @@ defmodule AshPhoenixGenApi.Resource do
   @gen_api %Spark.Dsl.Section{
     name: :gen_api,
     describe: """
-    Configure PhoenixGenApi endpoints for this Ash resource.
+    Configure PhoenixGenApi at the resource level.
 
-    The `gen_api` section allows you to define which Ash resource actions
-    should be exposed as PhoenixGenApi endpoints, along with their configuration
-    for routing, timeout, permissions, and more.
+    The `gen_api` section defines which Ash actions should be exposed as
+    PhoenixGenApi endpoints, along with their routing, timeout, permission,
+    and other settings.
 
-    Section-level options serve as defaults for all `action` entities within.
-    Each `action` entity can override these defaults.
+    Section-level options serve as defaults for all `action` and `mfa`
+    entities in this resource. Each entity can override these defaults.
     """,
     examples: [
       """
@@ -542,7 +542,6 @@ defmodule AshPhoenixGenApi.Resource do
         timeout 5_000
         response_type :async
         request_info true
-        version "0.0.1"
 
         action :send_direct_message do
           request_type "send_direct_message"
@@ -563,6 +562,10 @@ defmodule AshPhoenixGenApi.Resource do
         action :read
       end
       """
+    ],
+    entities: [
+      @action,
+      @mfa
     ],
     schema: [
       service: [
@@ -736,10 +739,6 @@ defmodule AshPhoenixGenApi.Resource do
         Defaults to `:struct`.
         """
       ]
-    ],
-    entities: [
-      @action,
-      @mfa
     ]
   }
 

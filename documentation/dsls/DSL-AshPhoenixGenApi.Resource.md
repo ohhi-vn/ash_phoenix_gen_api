@@ -47,14 +47,14 @@ See the DSL documentation for the full list of configuration options.
 
 
 ## gen_api
-Configure PhoenixGenApi endpoints for this Ash resource.
+Configure PhoenixGenApi at the resource level.
 
-The `gen_api` section allows you to define which Ash resource actions
-should be exposed as PhoenixGenApi endpoints, along with their configuration
-for routing, timeout, permissions, and more.
+The `gen_api` section defines which Ash actions should be exposed as
+PhoenixGenApi endpoints, along with their routing, timeout, permission,
+and other settings.
 
-Section-level options serve as defaults for all `action` entities within.
-Each `action` entity can override these defaults.
+Section-level options serve as defaults for all `action` and `mfa`
+entities in this resource. Each entity can override these defaults.
 
 
 ### Nested DSLs
@@ -71,7 +71,6 @@ gen_api do
   timeout 5_000
   response_type :async
   request_info true
-  version "0.0.1"
 
   action :send_direct_message do
     request_type "send_direct_message"
