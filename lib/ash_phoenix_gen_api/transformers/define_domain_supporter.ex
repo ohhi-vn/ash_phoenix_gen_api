@@ -150,7 +150,11 @@ defmodule AshPhoenixGenApi.Transformers.DefineDomainSupporter do
   Runs after the DefineFunConfigs transformer so that resource FunConfigs
   are already generated.
   """
+  # @impl true
+  # def after?(_), do: true
+
   @impl true
+  def after?(AshPhoenixGenApi.Transformers.DefineFunConfigs), do: true
   def after?(_), do: true
 
   @doc """
@@ -161,6 +165,12 @@ defmodule AshPhoenixGenApi.Transformers.DefineDomainSupporter do
 
   @impl true
   def transform(dsl_state) do
+    resources =
+      Spark.Dsl.Transformer.get_entities(dsl_state, [:resources])
+
+    Enum.each(resources, fn resource_info-> Code.ensure_compiled(resource_info.resource) end)
+
+
     domain = Spark.Dsl.Transformer.get_persisted(dsl_state, :module)
 
     # Check if gen_api is configured on this domain

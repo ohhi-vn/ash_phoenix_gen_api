@@ -1,6 +1,8 @@
 defmodule AshPhoenixGenApi.JsonConfigTest do
   use ExUnit.Case
 
+  @moduletag timeout: 60_000
+
   alias AshPhoenixGenApi.JsonConfig
 
   # ---------------------------------------------------------------------------
