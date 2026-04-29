@@ -9,8 +9,6 @@ defmodule AshPhoenixGenApi do
 
   ## Architecture
 
-  The extension consists of two main parts:
-
   ### Resource Extension (`AshPhoenixGenApi.Resource`)
 
   Added to Ash resources to define which actions should be exposed as PhoenixGenApi
@@ -20,14 +18,11 @@ defmodule AshPhoenixGenApi do
   ### Domain Extension (`AshPhoenixGenApi.Domain`)
 
   Added to Ash domains to provide domain-level defaults and auto-generate a
-  "supporter" module that aggregates FunConfigs from all resources in the domain.
-  The supporter module implements the PhoenixGenApi client config interface
-  (`get_config/1`, `get_config_version/1`), allowing gateway nodes to pull API
-  configurations from service nodes.
+  "supporter" module that aggregates FunConfigs from all resources. The supporter
+  module implements the PhoenixGenApi client config interface (`get_config/1`,
+  `get_config_version/1`), allowing gateway nodes to pull API configurations.
 
   ## Quick Start
-
-  ### 1. Add the extensions to your resource and domain
 
       # In your resource:
       defmodule MyApp.Chat.DirectMessage do
@@ -39,8 +34,6 @@ defmodule AshPhoenixGenApi do
           nodes {ClusterHelper, :get_nodes, [:chat]}
           choose_node_mode :random
           timeout 5_000
-          response_type :async
-          request_info true
 
           action :send_direct_message do
             request_type "send_direct_message"
@@ -48,31 +41,8 @@ defmodule AshPhoenixGenApi do
             check_permission {:arg, "from_user_id"}
           end
 
-          action :get_conversation do
-            timeout 5_000
-          end
-
           action :create do
             # Minimal config — request_type and args are auto-derived
-          end
-        end
-
-        attributes do
-          uuid_primary_key :id
-          attribute :from_user_id, :uuid
-          attribute :to_user_id, :uuid
-          attribute :content, :string
-          attribute :reply_to_id, :uuid
-          attribute :file_id, :uuid
-        end
-
-        actions do
-          create :create do
-            accept [:from_user_id, :to_user_id, :content, :reply_to_id, :file_id]
-          end
-
-          read :read do
-            primary? true
           end
         end
       end
@@ -85,57 +55,21 @@ defmodule AshPhoenixGenApi do
         gen_api do
           service "chat"
           nodes {ClusterHelper, :get_nodes, [:chat]}
-          choose_node_mode :random
           version "0.0.1"
           supporter_module MyApp.Chat.GenApiSupporter
         end
 
         resources do
           resource MyApp.Chat.DirectMessage
-          resource MyApp.Chat.GroupMessage
         end
       end
 
-  ### 2. The supporter module is auto-generated
-
-  After compilation, `MyApp.Chat.GenApiSupporter` will be available with:
-
-      # Get all FunConfigs (for PhoenixGenApi pull)
+      # The supporter module is auto-generated:
       MyApp.Chat.GenApiSupporter.fun_configs()
-      #=> [%PhoenixGenApi.Structs.FunConfig{request_type: "send_direct_message", ...}, ...]
-
-      # Get config for remote pull
       MyApp.Chat.GenApiSupporter.get_config(:gateway_1)
-      #=> {:ok, [%PhoenixGenApi.Structs.FunConfig{...}, ...]}
-
-      # Get config version
       MyApp.Chat.GenApiSupporter.get_config_version(:gateway_1)
-      #=> {:ok, "0.0.1"}
 
-      # Find a specific FunConfig by request_type
-      MyApp.Chat.GenApiSupporter.get_fun_config("send_direct_message")
-      #=> %PhoenixGenApi.Structs.FunConfig{request_type: "send_direct_message", ...}
-
-      # List all request types
-      MyApp.Chat.GenApiSupporter.list_request_types()
-      #=> ["send_direct_message", "get_conversation", ...]
-
-      # Push config to a gateway node (active push)
-      MyApp.Chat.GenApiSupporter.push_to_gateway(:"gateway1@host")
-      #=> {:ok, :accepted}
-
-      # Push config on application startup
-      MyApp.Chat.GenApiSupporter.push_on_startup(:"gateway1@host")
-      #=> {:ok, :accepted}
-
-      # Push to all configured push_nodes
-      MyApp.Chat.GenApiSupporter.push_to_configured_nodes()
-      #=> {:ok, [{:"gateway1@host", {:ok, :accepted}}, ...]}
-
-  ### 3. Configure the gateway node
-
-  On the Phoenix gateway node, configure `phoenix_gen_api` in `config.exs`:
-
+      # On the gateway node (config.exs):
       config :phoenix_gen_api, :gen_api,
         service_configs: [
           %{
@@ -147,229 +81,33 @@ defmodule AshPhoenixGenApi do
           }
         ]
 
-  ## Code Interface
-
-  When `code_interface?` is `true` (the default), the extension auto-generates
-  Elixir functions on the resource module for each gen_api action. This allows
-  you to call actions directly without building queries or changesets manually.
-
-      # Create action — auto-generates create/2 and create!/2
-      {:ok, message} = MyApp.Chat.DirectMessage.create(%{content: "Hello"})
-      message = MyApp.Chat.DirectMessage.create!(%{content: "Hello"})
-
-      # Read action — auto-generates read/2 and read!/2
-      {:ok, messages} = MyApp.Chat.DirectMessage.read()
-      messages = MyApp.Chat.DirectMessage.read!()
-
-      # Update action — auto-generates update/3 and update!/3 (requires record)
-      {:ok, updated} = MyApp.Chat.DirectMessage.update(message, %{content: "Updated"})
-      updated = MyApp.Chat.DirectMessage.update!(message, %{content: "Updated"})
-
-      # Destroy action — auto-generates destroy/3 and destroy!/3 (requires record)
-      :ok = MyApp.Chat.DirectMessage.destroy(message)
-      :ok = MyApp.Chat.DirectMessage.destroy!(message)
-
-      # Generic action — auto-generates action_name/2 and action_name!/2
-      {:ok, result} = MyApp.Chat.DirectMessage.greet(%{name: "World"})
-
-  You can disable code interface generation at the section level or per-action:
-
-      gen_api do
-        service "chat"
-        code_interface? false  # Disable for all actions
-
-        action :create do
-          code_interface? true  # Re-enable for this action only
-        end
-
-        action :read  # Inherits section-level false
-      end
-
-  ## Permission Callback
-
-  In addition to the built-in permission modes (`false`, `:any_authenticated`,
-  `{:arg, "arg_name"}`, `{:role, ["admin"]}`), you can specify a custom
-  callback function for permission checking using `permission_callback`.
-
-  The callback receives `request_type` (string) and `args` (map) as arguments
-  and returns `true` (continue) or `false` (permission denied).
-
-      defmodule MyApp.Permissions do
-        def check_permission(request_type, args) do
-          case request_type do
-            "delete_user" -> args["role"] == "admin"
-            "update_profile" -> args["user_id"] == args["target_user_id"]
-            _ -> true
-          end
-        end
-      end
-
-      gen_api do
-        service "chat"
-        permission_callback {MyApp.Permissions, :check_permission, []}
-
-        action :delete_user do
-          # Uses the section-level permission_callback
-        end
-
-        action :admin_action do
-          # Override with a different callback
-          permission_callback {MyApp.Permissions, :check_admin, []}
-        end
-      end
-
-  When `permission_callback` is set, it takes precedence over `check_permission`
-  and is stored as `{:callback, {Module, :function, []}}` in the FunConfig's
-  `check_permission` field.
-
-  ## Active Push Configuration
-
-  In addition to the pull-based model (where the gateway pulls config from
-  service nodes), you can configure the supporter module to **actively push**
-  its configuration to gateway nodes.
-
-      gen_api do
-        service "chat"
-        supporter_module MyApp.Chat.GenApiSupporter
-        version "0.0.1"
-        push_nodes [:"gateway1@host", :"gateway2@host"]
-        # Or use an MFA tuple for runtime resolution:
-        # push_nodes {ClusterHelper, :get_gateway_nodes, []}
-      end
-
-  Then push config during application startup:
-
-      def start(_type, _args) do
-        # ... start supervision tree, then:
-        MyApp.Chat.GenApiSupporter.push_to_configured_nodes()
-        # Or push to a specific node:
-        MyApp.Chat.GenApiSupporter.push_on_startup(:"gateway1@host")
-      end
-
-  The generated supporter module includes these push functions:
-  - `build_push_config/0` - Builds a `PushConfig` struct from the domain config
-  - `push_to_gateway/2` - Pushes config to a specific gateway node
-  - `push_on_startup/2` - Pushes config on application startup
-  - `verify_on_gateway/2` - Verifies config version on a gateway node
-  - `resolve_push_nodes/0` - Resolves `push_nodes` at runtime
-  - `push_to_configured_nodes/1` - Pushes to all configured push_nodes
-
-  ## Result Encoder
-
-  By default, the auto-generated code interface functions return Ash resource
-  structs as-is. You can configure `result_encoder` to transform the result
-  before returning it to the caller.
-
-  ### Encoder Modes
-
-  - `:struct` — Return the Ash resource struct as-is (default)
-  - `:map` — Convert the Ash resource struct to a map containing only public fields
-    (using `Ash.Resource.Info.public_fields/1` to filter; falls back to
-    `Map.from_struct/1` for non-Ash-resource structs)
-  - `{Module, :function, args}` — Custom encoder MFA. The function receives
-    the result as its first argument, followed by `args`, and must return
-    the encoded result.
-
-  ### Configuration
-
-  `result_encoder` can be set at the domain, resource section, or action level:
-
-      # Domain-level default
-      gen_api do
-        service "chat"
-        result_encoder :map
-        supporter_module MyApp.Chat.GenApiSupporter
-      end
-
-      # Resource-level default
-      gen_api do
-        service "chat"
-        result_encoder :map
-
-        action :create
-        action :read
-      end
-
-      # Action-level override
-      gen_api do
-        service "chat"
-        result_encoder :struct
-
-        action :create do
-          result_encoder :map  # Override section-level default
-        end
-
-        action :read  # Inherits section-level :struct
-      end
-
-      # Custom encoder MFA
-      gen_api do
-        service "chat"
-        result_encoder {MyApp.Encoder, :to_api_format, []}
-
-        action :create
-      end
-
-  ### Encoding Behavior
-
-  For `:map` encoding:
-  - Ash resource structs are converted to maps containing only their public fields
-    (attributes, calculations, aggregates, relationships) using
-    `Ash.Resource.Info.public_fields/1` to filter
-  - Non-Ash-resource structs fall back to `Map.from_struct/1`
-  - Lists of structs are mapped accordingly
-  - The atom `:ok` (from destroy actions) is returned as-is
-  - Non-struct values (e.g., generic action results) are returned as-is
-
-  For custom MFA encoders:
-  - The function receives the raw result value as its first argument
-  - For read actions, the value is a list of structs
-  - For create/update actions, the value is a single struct
-  - For destroy actions, the value is `:ok`
-  - The function must return the encoded value
-
-  ### Important Note
-
-  When using `:map` or custom encoding, the bang (!) functions return encoded
-  values. Since update and destroy actions require a struct as their first
-  argument, you cannot chain encoded results directly. Use the non-bang
-  versions or create records directly via Ash if you need to chain operations:
-
-      # This works — create returns struct, update accepts struct
-      {:ok, record} = MyResource.create(%{name: "test"})
-      {:ok, updated} = MyResource.update(record, %{name: "updated"})
-
-      # This does NOT work — create! returns map, update requires struct
-      record = MyResource.create!(%{name: "test"})  # Returns map with :map encoder
-      MyResource.update(record, %{name: "updated"}) # Error: record must be a struct
-
   ## Type Mapping
 
   Ash types are automatically mapped to PhoenixGenApi argument types:
 
   | Ash Type | PhoenixGenApi Type |
   |----------|-------------------|
-  | `:string`, `:uuid`, `:boolean`, `:date`, etc. | `:string` |
+  | `:string`, `:uuid`, `:date`, etc. | `:string` |
+  | `{:string, max_length}` | `{:string, max_bytes}` |
   | `:integer`, `:float`, `:decimal` | `:num` |
+  | `:boolean` | `:boolean` |
+  | `:datetime`, `:utc_datetime` | `:datetime` |
+  | `:naive_datetime` | `:naive_datetime` |
+  | `:map`, `:json`, `:struct`, `:keyword` | `:map` |
+  | `{:map, max_items}` | `{:map, max_items}` |
   | `{:array, :string}`, `{:array, :uuid}` | `{:list_string, max_items, max_item_length}` |
   | `{:array, :integer}`, `{:array, :float}` | `{:list_num, max_items}` |
+  | `{:array, :map}`, `{:array, :boolean}`, etc. | `{:list, max_items}` |
 
   See `AshPhoenixGenApi.TypeMapper` for the complete mapping table.
-
-  ## Resolution Order
-
-  Configuration values are resolved in this order (highest priority first):
-
-  1. **Action-level explicit config** — e.g., `action :foo do timeout 10_000 end`
-  2. **Resource section-level defaults** — e.g., `gen_api do timeout 5_000 end`
-  3. **Domain section-level defaults** — e.g., `gen_api do timeout 5_000 end`
-  4. **Built-in defaults** — e.g., timeout defaults to `5000`
 
   ## Modules
 
   - `AshPhoenixGenApi.Resource` — Resource-level DSL extension
   - `AshPhoenixGenApi.Resource.Info` — Resource introspection helpers
   - `AshPhoenixGenApi.Resource.ActionConfig` — Action configuration struct
+  - `AshPhoenixGenApi.Resource.SharedTypes` — Shared type definitions for config structs
+  - `AshPhoenixGenApi.Resource.EffectiveField` — Macro for effective field resolution
   - `AshPhoenixGenApi.Domain` — Domain-level DSL extension
   - `AshPhoenixGenApi.Domain.Info` — Domain introspection helpers
   - `AshPhoenixGenApi.TypeMapper` — Ash type to PhoenixGenApi type mapping
@@ -401,6 +139,8 @@ defmodule AshPhoenixGenApi do
         AshPhoenixGenApi.Resource,
         AshPhoenixGenApi.Resource.Info,
         AshPhoenixGenApi.Resource.ActionConfig,
+        AshPhoenixGenApi.Resource.SharedTypes,
+        AshPhoenixGenApi.Resource.EffectiveField,
         AshPhoenixGenApi.Domain,
         AshPhoenixGenApi.Domain.Info,
         AshPhoenixGenApi.TypeMapper,
@@ -413,6 +153,8 @@ defmodule AshPhoenixGenApi do
       AshPhoenixGenApi.Resource,
       AshPhoenixGenApi.Resource.Info,
       AshPhoenixGenApi.Resource.ActionConfig,
+      AshPhoenixGenApi.Resource.SharedTypes,
+      AshPhoenixGenApi.Resource.EffectiveField,
       AshPhoenixGenApi.Domain,
       AshPhoenixGenApi.Domain.Info,
       AshPhoenixGenApi.TypeMapper,

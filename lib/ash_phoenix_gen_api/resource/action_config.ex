@@ -39,14 +39,15 @@ defmodule AshPhoenixGenApi.Resource.ActionConfig do
   2. Auto-derived from the Ash action's accepted attributes and arguments
   """
 
-  @type permission_mode ::
-          false
-          | :any_authenticated
-          | {:arg, String.t()}
-          | {:role, [String.t()]}
-          | {:callback, {module(), atom(), [any()]}}
+  alias AshPhoenixGenApi.Resource.SharedTypes
 
-  @type permission_callback :: {module(), atom(), [any()]} | nil
+  @type permission_mode :: SharedTypes.permission_mode()
+  @type permission_callback :: SharedTypes.permission_callback()
+  @type node_config :: SharedTypes.node_config()
+  @type choose_node_mode :: SharedTypes.choose_node_mode()
+  @type retry_config :: SharedTypes.retry_config()
+  @type gen_api_type :: SharedTypes.gen_api_type()
+  @type result_encoder :: SharedTypes.result_encoder()
 
   @doc """
   Callback function signature for permission checking.
@@ -68,35 +69,6 @@ defmodule AshPhoenixGenApi.Resource.ActionConfig do
       end
   """
   @callback permission_callback(request_type :: String.t(), args :: map()) :: boolean()
-
-  @type node_config ::
-          [atom()]
-          | {module(), atom(), [any()]}
-          | :local
-
-  @type choose_node_mode ::
-          :random
-          | :hash
-          | {:hash, String.t()}
-          | :round_robin
-
-  @type retry_config ::
-          nil
-          | pos_integer()
-          | {:same_node, pos_integer()}
-          | {:all_nodes, pos_integer()}
-
-  @type gen_api_type ::
-          :string
-          | :num
-          | {:list_string, pos_integer(), pos_integer()}
-          | {:list_num, pos_integer()}
-
-  @type result_encoder ::
-          :struct
-          | :map
-          | {module(), atom(), [any()]}
-          | nil
 
   @type t :: %__MODULE__{
           name: atom(),
@@ -140,6 +112,8 @@ defmodule AshPhoenixGenApi.Resource.ActionConfig do
     __spark_metadata__: nil
   ]
 
+  use AshPhoenixGenApi.Resource.EffectiveField
+
   @doc """
   Resolves the effective request_type for this action config.
 
@@ -166,100 +140,6 @@ defmodule AshPhoenixGenApi.Resource.ActionConfig do
   end
 
   @doc """
-  Resolves the effective timeout, falling back to the provided default.
-
-  ## Examples
-
-      iex> config = %AshPhoenixGenApi.Resource.ActionConfig{timeout: 10_000}
-      iex> AshPhoenixGenApi.Resource.ActionConfig.effective_timeout(config, 5_000)
-      10_000
-
-      iex> config = %AshPhoenixGenApi.Resource.ActionConfig{timeout: nil}
-      iex> AshPhoenixGenApi.Resource.ActionConfig.effective_timeout(config, 5_000)
-      5000
-  """
-  @spec effective_timeout(t(), pos_integer() | :infinity) :: pos_integer() | :infinity
-  def effective_timeout(%__MODULE__{timeout: nil}, default), do: default
-  def effective_timeout(%__MODULE__{timeout: timeout}, _default), do: timeout
-
-  @doc """
-  Resolves the effective response_type, falling back to the provided default.
-  """
-  @spec effective_response_type(t(), :sync | :async | :stream | :none) ::
-          :sync | :async | :stream | :none
-  def effective_response_type(%__MODULE__{response_type: nil}, default), do: default
-  def effective_response_type(%__MODULE__{response_type: response_type}, _default), do: response_type
-
-  @doc """
-  Resolves the effective request_info, falling back to the provided default.
-  """
-  @spec effective_request_info(t(), boolean()) :: boolean()
-  def effective_request_info(%__MODULE__{request_info: nil}, default), do: default
-  def effective_request_info(%__MODULE__{request_info: request_info}, _default), do: request_info
-
-  @doc """
-  Resolves the effective check_permission, falling back to the provided default.
-  """
-  @spec effective_check_permission(t(), permission_mode()) :: permission_mode()
-  def effective_check_permission(%__MODULE__{check_permission: nil}, default), do: default
-  def effective_check_permission(%__MODULE__{check_permission: check_permission}, _default), do: check_permission
-
-  @doc """
-  Resolves the effective permission_callback, falling back to the provided default.
-
-  When the action-level `permission_callback` is set, returns that value.
-  Otherwise, returns the section-level default.
-
-  The callback MFA function receives `(request_type, args)` as arguments and
-  returns `true` (continue) or `false` (permission denied).
-
-  ## Examples
-
-      iex> config = %AshPhoenixGenApi.Resource.ActionConfig{permission_callback: {MyModule, :check, []}}
-      iex> AshPhoenixGenApi.Resource.ActionConfig.effective_permission_callback(config, nil)
-      {MyModule, :check, []}
-
-      iex> config = %AshPhoenixGenApi.Resource.ActionConfig{permission_callback: nil}
-      iex> AshPhoenixGenApi.Resource.ActionConfig.effective_permission_callback(config, {MyModule, :check, []})
-      {MyModule, :check, []}
-
-      iex> config = %AshPhoenixGenApi.Resource.ActionConfig{permission_callback: nil}
-      iex> AshPhoenixGenApi.Resource.ActionConfig.effective_permission_callback(config, nil)
-      nil
-  """
-  @spec effective_permission_callback(t(), permission_callback()) :: permission_callback()
-  def effective_permission_callback(%__MODULE__{permission_callback: nil}, default), do: default
-  def effective_permission_callback(%__MODULE__{permission_callback: permission_callback}, _default), do: permission_callback
-
-  @doc """
-  Resolves the effective choose_node_mode, falling back to the provided default.
-  """
-  @spec effective_choose_node_mode(t(), choose_node_mode()) :: choose_node_mode()
-  def effective_choose_node_mode(%__MODULE__{choose_node_mode: nil}, default), do: default
-  def effective_choose_node_mode(%__MODULE__{choose_node_mode: choose_node_mode}, _default), do: choose_node_mode
-
-  @doc """
-  Resolves the effective nodes, falling back to the provided default.
-  """
-  @spec effective_nodes(t(), node_config()) :: node_config()
-  def effective_nodes(%__MODULE__{nodes: nil}, default), do: default
-  def effective_nodes(%__MODULE__{nodes: nodes}, _default), do: nodes
-
-  @doc """
-  Resolves the effective retry, falling back to the provided default.
-  """
-  @spec effective_retry(t(), retry_config()) :: retry_config()
-  def effective_retry(%__MODULE__{retry: nil}, default), do: default
-  def effective_retry(%__MODULE__{retry: retry}, _default), do: retry
-
-  @doc """
-  Resolves the effective version, falling back to the provided default.
-  """
-  @spec effective_version(t(), String.t()) :: String.t()
-  def effective_version(%__MODULE__{version: nil}, default), do: default
-  def effective_version(%__MODULE__{version: version}, _default), do: version
-
-  @doc """
   Resolves the effective mfa, falling back to auto-generation from the resource module and action name.
 
   When `mfa` is explicitly set on the action config, it is returned as-is.
@@ -276,29 +156,6 @@ defmodule AshPhoenixGenApi.Resource.ActionConfig do
   def effective_mfa(%__MODULE__{mfa: mfa}, _resource_module) do
     mfa
   end
-
-  @doc """
-  Checks if this action config has explicit arg_types defined.
-  """
-  @spec has_explicit_arg_types?(t()) :: boolean()
-  def has_explicit_arg_types?(%__MODULE__{arg_types: nil}), do: false
-  def has_explicit_arg_types?(%__MODULE__{arg_types: arg_types}) when map_size(arg_types) == 0, do: false
-  def has_explicit_arg_types?(%__MODULE__{arg_types: _}), do: true
-
-  @doc """
-  Checks if this action config has explicit arg_orders defined.
-  """
-  @spec has_explicit_arg_orders?(t()) :: boolean()
-  def has_explicit_arg_orders?(%__MODULE__{arg_orders: :map}), do: false
-  def has_explicit_arg_orders?(%__MODULE__{arg_orders: nil}), do: false
-  def has_explicit_arg_orders?(%__MODULE__{arg_orders: []}), do: false
-  def has_explicit_arg_orders?(%__MODULE__{arg_orders: _}), do: true
-
-  @doc """
-  Checks if this action config is enabled (not disabled).
-  """
-  @spec enabled?(t()) :: boolean()
-  def enabled?(%__MODULE__{disabled: disabled}), do: !disabled
 
   @doc """
   Resolves the effective code_interface? setting, falling back to the provided default.

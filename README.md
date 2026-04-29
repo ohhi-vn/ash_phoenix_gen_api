@@ -1,4 +1,4 @@
-> ⚠️ **EXPERIMENTAL / UNDER ACTIVE DEVELOPMENT** ⚠️
+> **Note:** This library is under active development and the API may change.
 
 # AshPhoenixGenApi
 
@@ -28,7 +28,7 @@ def deps do
   [
     {:ash_phoenix_gen_api, "~> 0.1.0"},
     {:ash, "~> 3.5"},
-    {:phoenix_gen_api, "~> 2.1"}
+    {:phoenix_gen_api, "~> 2.11"}
   ]
 end
 ```
@@ -302,27 +302,34 @@ Ash types are automatically mapped to PhoenixGenApi argument types:
 | Ash Type | PhoenixGenApi Type |
 |----------|-------------------|
 | `:string`, `Ash.Type.String` | `:string` |
+| `:string` (with `max_length` constraint) | `{:string, max_bytes}` |
 | `:ci_string`, `Ash.Type.CiString` | `:string` |
 | `:integer`, `Ash.Type.Integer` | `:num` |
 | `:float`, `Ash.Type.Float` | `:num` |
 | `:decimal`, `Ash.Type.Decimal` | `:num` |
 | `:uuid`, `Ash.Type.UUID` | `:string` |
 | `:uuid_v7`, `Ash.Type.UUIDv7` | `:string` |
-| `:boolean`, `Ash.Type.Boolean` | `:string` |
+| `:boolean`, `Ash.Type.Boolean` | `:boolean` |
 | `:date`, `Ash.Type.Date` | `:string` |
 | `:time`, `Ash.Type.Time` | `:string` |
-| `:datetime`, `Ash.Type.DateTime` | `:string` |
-| `:utc_datetime`, `Ash.Type.UtcDateTime` | `:string` |
-| `:naive_datetime`, `Ash.Type.NaiveDateTime` | `:string` |
+| `:datetime`, `Ash.Type.DateTime` | `:datetime` |
+| `:utc_datetime`, `Ash.Type.UtcDateTime` | `:datetime` |
+| `:utc_datetime_usec`, `Ash.Type.UtcDateTimeUsec` | `:datetime` |
+| `:naive_datetime`, `Ash.Type.NaiveDateTime` | `:naive_datetime` |
+| `:naive_datetime_usec`, `Ash.Type.NaiveDateTimeUsec` | `:naive_datetime` |
 | `:atom`, `Ash.Type.Atom` | `:string` |
-| `:map`, `Ash.Type.Map` | `:string` |
-| `:json`, `Ash.Type.Json` | `:string` |
+| `:map`, `Ash.Type.Map` | `:map` |
+| `Ash.Type.Json` | `:map` |
+| `:struct`, `Ash.Type.Struct` | `:map` |
+| `:keyword`, `Ash.Type.Keyword` | `:map` |
 | `:binary`, `Ash.Type.Binary` | `:string` |
 | `:term`, `Ash.Type.Term` | `:string` |
 | `{:array, :string}` | `{:list_string, 1000, 50}` |
 | `{:array, :integer}` | `{:list_num, 1000}` |
 | `{:array, :uuid}` | `{:list_string, 1000, 50}` |
 | `{:array, :float}` | `{:list_num, 1000}` |
+| `{:array, :map}` | `{:list, 1000}` |
+| `{:array, :boolean}` | `{:list, 1000}` |
 
 See `AshPhoenixGenApi.TypeMapper` for the complete mapping and customization options.
 
@@ -357,7 +364,7 @@ Example — given this Ash action:
 ```elixir
 actions do
   create :create do
-    accept [:from_user_id, :to_user_id, :content, :reply_to_id, :file_id]
+    accept [:from_user_id, :to_user_id, :content, :sent_at, :metadata, :reply_to_id, :file_id]
   end
 end
 ```
@@ -366,13 +373,15 @@ The auto-derived `arg_types` and `arg_orders` would be:
 
 ```elixir
 arg_types: %{
-  "from_user_id" => :string,  # UUID → :string
-  "to_user_id" => :string,    # UUID → :string
-  "content" => :string,       # String → :string
-  "reply_to_id" => :string,   # UUID → :string
-  "file_id" => :string        # UUID → :string
+  "from_user_id" => :string,       # UUID → :string
+  "to_user_id" => :string,         # UUID → :string
+  "content" => :string,            # String → :string
+  "sent_at" => :datetime,          # DateTime → :datetime
+  "metadata" => :map,              # Map → :map
+  "reply_to_id" => :string,        # UUID → :string
+  "file_id" => :string             # UUID → :string
 },
-arg_orders: ["from_user_id", "to_user_id", "content", "reply_to_id", "file_id"]
+arg_orders: ["from_user_id", "to_user_id", "content", "sent_at", "metadata", "reply_to_id", "file_id"]
 ```
 
 ## Generated Supporter Module
@@ -672,6 +681,7 @@ defmodule MyApp.Chat.DirectMessage do
 
     action :mark_read do
       request_type "mark_direct_messages_as_read"
+      arg_types %{"read" => :boolean}
     end
 
     # Standalone MFA endpoint — no Ash action needed
@@ -712,6 +722,8 @@ This generates the same FunConfig structures that were previously hand-written i
 | `AshPhoenixGenApi.Resource` | Resource-level DSL extension |
 | `AshPhoenixGenApi.Resource.Info` | Resource introspection helpers |
 | `AshPhoenixGenApi.Resource.ActionConfig` | Action configuration struct |
+| `AshPhoenixGenApi.Resource.SharedTypes` | Shared type definitions for config structs |
+| `AshPhoenixGenApi.Resource.EffectiveField` | Macro for effective_* field resolution |
 | `AshPhoenixGenApi.Domain` | Domain-level DSL extension |
 | `AshPhoenixGenApi.Domain.Info` | Domain introspection helpers |
 | `AshPhoenixGenApi.TypeMapper` | Ash type to PhoenixGenApi type mapping |

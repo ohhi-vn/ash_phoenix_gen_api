@@ -4,8 +4,16 @@ defmodule AshPhoenixGenApi.TypeMapper do
 
   PhoenixGenApi supports the following argument types:
 
-  - `:string` - String values (UUIDs, dates, booleans as strings, etc.)
+  - `:string` - String values (UUIDs, dates, etc.)
+  - `{:string, max_bytes}` - String with custom max byte size
   - `:num` - Numeric values (integers, floats)
+  - `:boolean` - Boolean values
+  - `:datetime` - ISO 8601 datetime string, auto-converted to DateTime
+  - `:naive_datetime` - ISO 8601 datetime string, auto-converted to NaiveDateTime
+  - `:map` - Generic map
+  - `{:map, max_items}` - Map with max items constraint
+  - `:list` - Generic list
+  - `{:list, max_items}` - List with max items constraint
   - `{:list_string, max_items, max_item_length}` - Lists of strings with constraints
   - `{:list_num, max_items}` - Lists of numbers with constraints
 
@@ -13,7 +21,7 @@ defmodule AshPhoenixGenApi.TypeMapper do
 
   | Ash Type | PhoenixGenApi Type |
   |----------|-------------------|
-  | `:string` / `Ash.Type.String` | `:string` |
+  | `:string` / `Ash.Type.String` | `:string` or `{:string, max_bytes}` |
   | `:integer` / `Ash.Type.Integer` | `:num` |
   | `:float` / `Ash.Type.Float` | `:num` |
   | `:decimal` / `Ash.Type.Decimal` | `:num` |
@@ -22,22 +30,31 @@ defmodule AshPhoenixGenApi.TypeMapper do
   | `:uuid_v7` / `Ash.Type.UUIDv7` | `:string` |
   | `:date` / `Ash.Type.Date` | `:string` |
   | `:time` / `Ash.Type.Time` | `:string` |
-  | `:datetime` / `Ash.Type.DateTime` | `:string` |
-  | `:utc_datetime` / `Ash.Type.UtcDateTime` | `:string` |
-  | `:naive_datetime` / `Ash.Type.NaiveDateTime` | `:string` |
+  | `:datetime` / `Ash.Type.DateTime` | `:datetime` |
+  | `:utc_datetime` / `Ash.Type.UtcDateTime` | `:datetime` |
+  | `:utc_datetime_usec` / `Ash.Type.UtcDateTimeUsec` | `:datetime` |
+  | `:naive_datetime` / `Ash.Type.NaiveDateTime` | `:naive_datetime` |
+  | `:naive_datetime_usec` / `Ash.Type.NaiveDateTimeUsec` | `:naive_datetime` |
   | `:atom` / `Ash.Type.Atom` | `:string` |
-  | `:map` / `Ash.Type.Map` | `:string` |
-  | `:json` / `Ash.Type.Json` | `:string` |
+  | `:map` / `Ash.Type.Map` | `:map` or `{:map, max_items}` |
+  | `:json` / `Ash.Type.Json` | `:map` |
+  | `:struct` / `Ash.Type.Struct` | `:map` |
+  | `:keyword` / `Ash.Type.Keyword` | `:map` |
   | `:binary` / `Ash.Type.Binary` | `:string` |
+  | `:term` / `Ash.Type.Term` | `:string` |
+  | `:tuple` / `Ash.Type.Tuple` | `:string` |
   | `{:array, :string}` | `{:list_string, 1000, 50}` |
   | `{:array, :integer}` | `{:list_num, 1000}` |
   | `{:array, :uuid}` | `{:list_string, 1000, 50}` |
+  | `{:array, :map}` | `{:list, 1000}` |
   | `:ci_string` / `Ash.Type.CiString` | `:string` |
-  | `:term` / `Ash.Type.Term` | `:string` |
+  | `:duration` / `Ash.Type.Duration` | `:string` |
+  | `:duration_name` / `Ash.Type.DurationName` | `:string` |
   """
 
   @default_max_list_items 1000
   @default_max_string_item_length 50
+  @default_max_map_items 1000
 
   @doc """
   Maps an Ash type to a PhoenixGenApi argument type.
@@ -45,7 +62,7 @@ defmodule AshPhoenixGenApi.TypeMapper do
   ## Parameters
 
     - `ash_type` - The Ash type (atom or tuple) to map
-  - `constraints` - Optional Ash type constraints (used for list constraints, etc.)
+    - `constraints` - Optional Ash type constraints (used for list constraints, etc.)
 
   ## Returns
 
@@ -62,24 +79,62 @@ defmodule AshPhoenixGenApi.TypeMapper do
       iex> AshPhoenixGenApi.TypeMapper.to_gen_api_type(:uuid)
       :string
 
+      iex> AshPhoenixGenApi.TypeMapper.to_gen_api_type(:datetime)
+      :datetime
+
+      iex> AshPhoenixGenApi.TypeMapper.to_gen_api_type(:naive_datetime)
+      :naive_datetime
+
+      iex> AshPhoenixGenApi.TypeMapper.to_gen_api_type(:map)
+      :map
+
+      iex> AshPhoenixGenApi.TypeMapper.to_gen_api_type(:map, max_items: 50)
+      {:map, 50}
+
       iex> AshPhoenixGenApi.TypeMapper.to_gen_api_type({:array, :string})
       {:list_string, 1000, 50}
 
       iex> AshPhoenixGenApi.TypeMapper.to_gen_api_type({:array, :integer})
       {:list_num, 1000}
+
+      iex> AshPhoenixGenApi.TypeMapper.to_gen_api_type({:array, :map})
+      {:list, 1000}
   """
   @spec to_gen_api_type(atom() | tuple(), keyword()) ::
           :string
+          | {:string, pos_integer()}
           | :num
+          | :boolean
+          | :datetime
+          | :naive_datetime
+          | :map
+          | {:map, pos_integer()}
+          | :list
+          | {:list, pos_integer()}
           | {:list_string, pos_integer(), pos_integer()}
           | {:list_num, pos_integer()}
   def to_gen_api_type(ash_type, constraints \\ [])
 
   # String types
-  def to_gen_api_type(:string, _constraints), do: :string
-  def to_gen_api_type(Ash.Type.String, _constraints), do: :string
-  def to_gen_api_type(:ci_string, _constraints), do: :string
-  def to_gen_api_type(Ash.Type.CiString, _constraints), do: :string
+  def to_gen_api_type(:string, constraints) do
+    case Keyword.get(constraints, :max_length) do
+      nil -> :string
+      max_length when is_integer(max_length) and max_length > 0 -> {:string, max_length}
+      _ -> :string
+    end
+  end
+
+  def to_gen_api_type(Ash.Type.String, constraints), do: to_gen_api_type(:string, constraints)
+
+  def to_gen_api_type(:ci_string, constraints) do
+    case Keyword.get(constraints, :max_length) do
+      nil -> :string
+      max_length when is_integer(max_length) and max_length > 0 -> {:string, max_length}
+      _ -> :string
+    end
+  end
+
+  def to_gen_api_type(Ash.Type.CiString, constraints), do: to_gen_api_type(:ci_string, constraints)
 
   # Numeric types
   def to_gen_api_type(:integer, _constraints), do: :num
@@ -95,29 +150,33 @@ defmodule AshPhoenixGenApi.TypeMapper do
   def to_gen_api_type(:uuid_v7, _constraints), do: :string
   def to_gen_api_type(Ash.Type.UUIDv7, _constraints), do: :string
 
-  # Date/Time types - all serialized as strings
+  # Date/Time types - date, time, duration remain as :string
   def to_gen_api_type(:date, _constraints), do: :string
   def to_gen_api_type(Ash.Type.Date, _constraints), do: :string
   def to_gen_api_type(:time, _constraints), do: :string
   def to_gen_api_type(Ash.Type.Time, _constraints), do: :string
   def to_gen_api_type(:time_usec, _constraints), do: :string
   def to_gen_api_type(Ash.Type.TimeUsec, _constraints), do: :string
-  def to_gen_api_type(:datetime, _constraints), do: :string
-  def to_gen_api_type(Ash.Type.DateTime, _constraints), do: :string
-  def to_gen_api_type(:utc_datetime, _constraints), do: :string
-  def to_gen_api_type(Ash.Type.UtcDateTime, _constraints), do: :string
-  def to_gen_api_type(:utc_datetime_usec, _constraints), do: :string
-  def to_gen_api_type(Ash.Type.UtcDateTimeUsec, _constraints), do: :string
-  def to_gen_api_type(:naive_datetime, _constraints), do: :string
-  def to_gen_api_type(Ash.Type.NaiveDateTime, _constraints), do: :string
-  def to_gen_api_type(:naive_datetime_usec, _constraints), do: :string
-  def to_gen_api_type(Ash.Type.NaiveDateTimeUsec, _constraints), do: :string
   def to_gen_api_type(:duration, _constraints), do: :string
   def to_gen_api_type(Ash.Type.Duration, _constraints), do: :string
   def to_gen_api_type(:duration_name, _constraints), do: :string
   def to_gen_api_type(Ash.Type.DurationName, _constraints), do: :string
 
-  # Boolean - serialized as string ("true"/"false")
+  # DateTime types - map to :datetime for auto-conversion
+  def to_gen_api_type(:datetime, _constraints), do: :datetime
+  def to_gen_api_type(Ash.Type.DateTime, _constraints), do: :datetime
+  def to_gen_api_type(:utc_datetime, _constraints), do: :datetime
+  def to_gen_api_type(Ash.Type.UtcDateTime, _constraints), do: :datetime
+  def to_gen_api_type(:utc_datetime_usec, _constraints), do: :datetime
+  def to_gen_api_type(Ash.Type.UtcDateTimeUsec, _constraints), do: :datetime
+
+  # NaiveDateTime types - map to :naive_datetime for auto-conversion
+  def to_gen_api_type(:naive_datetime, _constraints), do: :naive_datetime
+  def to_gen_api_type(Ash.Type.NaiveDateTime, _constraints), do: :naive_datetime
+  def to_gen_api_type(:naive_datetime_usec, _constraints), do: :naive_datetime
+  def to_gen_api_type(Ash.Type.NaiveDateTimeUsec, _constraints), do: :naive_datetime
+
+  # Boolean
   def to_gen_api_type(:boolean, _constraints), do: :boolean
   def to_gen_api_type(Ash.Type.Boolean, _constraints), do: :boolean
 
@@ -125,14 +184,27 @@ defmodule AshPhoenixGenApi.TypeMapper do
   def to_gen_api_type(:atom, _constraints), do: :string
   def to_gen_api_type(Ash.Type.Atom, _constraints), do: :string
 
-  # Map/JSON/Struct - serialized as string (JSON encoded)
-  def to_gen_api_type(:map, _constraints), do: :string
-  def to_gen_api_type(Ash.Type.Map, _constraints), do: :string
-  def to_gen_api_type(Ash.Type.Json, _constraints), do: :string
-  def to_gen_api_type(:struct, _constraints), do: :string
-  def to_gen_api_type(Ash.Type.Struct, _constraints), do: :string
-  def to_gen_api_type(:keyword, _constraints), do: :string
-  def to_gen_api_type(Ash.Type.Keyword, _constraints), do: :string
+  # Map types - map to :map with optional max_items constraint
+  def to_gen_api_type(:map, constraints) do
+    case Keyword.get(constraints, :max_items) do
+      nil -> :map
+      max_items when is_integer(max_items) and max_items > 0 -> {:map, max_items}
+      _ -> :map
+    end
+  end
+
+  def to_gen_api_type(Ash.Type.Map, constraints), do: to_gen_api_type(:map, constraints)
+
+  # JSON - map to :map
+  def to_gen_api_type(Ash.Type.Json, _constraints), do: :map
+
+  # Struct - map to :map
+  def to_gen_api_type(:struct, _constraints), do: :map
+  def to_gen_api_type(Ash.Type.Struct, _constraints), do: :map
+
+  # Keyword - map to :map
+  def to_gen_api_type(:keyword, _constraints), do: :map
+  def to_gen_api_type(Ash.Type.Keyword, _constraints), do: :map
 
   # Binary - base64 encoded as string
   def to_gen_api_type(:binary, _constraints), do: :string
@@ -161,12 +233,33 @@ defmodule AshPhoenixGenApi.TypeMapper do
 
         {:list_string, max_items, max_item_length}
 
+      {:string, _max_bytes} ->
+        max_item_length =
+          Keyword.get(inner_constraints, :max_length, @default_max_string_item_length)
+
+        {:list_string, max_items, max_item_length}
+
       :num ->
         {:list_num, max_items}
 
-      # Nested lists and complex types are serialized as list_string
+      :map ->
+        {:list, max_items}
+
+      {:map, _max_items} ->
+        {:list, max_items}
+
+      :datetime ->
+        {:list, max_items}
+
+      :naive_datetime ->
+        {:list, max_items}
+
+      :boolean ->
+        {:list, max_items}
+
+      # Nested lists and other complex types use :list
       _ ->
-        {:list_string, max_items, @default_max_string_item_length}
+        {:list, max_items}
     end
   end
 
@@ -225,10 +318,26 @@ defmodule AshPhoenixGenApi.TypeMapper do
       iex> attr = %{__struct__: Ash.Resource.Attribute, name: :count, type: Ash.Type.Integer, constraints: []}
       iex> AshPhoenixGenApi.TypeMapper.attribute_to_gen_api_type(attr)
       :num
+
+      iex> attr = %{__struct__: Ash.Resource.Attribute, name: :created_at, type: Ash.Type.DateTime, constraints: []}
+      iex> AshPhoenixGenApi.TypeMapper.attribute_to_gen_api_type(attr)
+      :datetime
+
+      iex> attr = %{__struct__: Ash.Resource.Attribute, name: :metadata, type: Ash.Type.Map, constraints: []}
+      iex> AshPhoenixGenApi.TypeMapper.attribute_to_gen_api_type(attr)
+      :map
   """
   @spec attribute_to_gen_api_type(%{type: term(), constraints: keyword()}) ::
           :string
+          | {:string, pos_integer()}
           | :num
+          | :boolean
+          | :datetime
+          | :naive_datetime
+          | :map
+          | {:map, pos_integer()}
+          | :list
+          | {:list, pos_integer()}
           | {:list_string, pos_integer(), pos_integer()}
           | {:list_num, pos_integer()}
   def attribute_to_gen_api_type(%{type: type, constraints: constraints}) do
@@ -251,7 +360,15 @@ defmodule AshPhoenixGenApi.TypeMapper do
   """
   @spec argument_to_gen_api_type(%{type: term(), constraints: keyword()}) ::
           :string
+          | {:string, pos_integer()}
           | :num
+          | :boolean
+          | :datetime
+          | :naive_datetime
+          | :map
+          | {:map, pos_integer()}
+          | :list
+          | {:list, pos_integer()}
           | {:list_string, pos_integer(), pos_integer()}
           | {:list_num, pos_integer()}
   def argument_to_gen_api_type(%{type: type, constraints: constraints}) do
@@ -285,6 +402,12 @@ defmodule AshPhoenixGenApi.TypeMapper do
   """
   @spec default_max_string_item_length() :: pos_integer()
   def default_max_string_item_length, do: @default_max_string_item_length
+
+  @doc """
+  Returns the default max map items for map types.
+  """
+  @spec default_max_map_items() :: pos_integer()
+  def default_max_map_items, do: @default_max_map_items
 
   @doc """
   Gets the input fields for an Ash action, combining accepted attributes and arguments.

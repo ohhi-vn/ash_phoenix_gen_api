@@ -364,15 +364,47 @@ defmodule AshPhoenixGenApi.JsonConfig do
       iex> AshPhoenixGenApi.JsonConfig.default_value_for_type(:num)
       0
 
+      iex> AshPhoenixGenApi.JsonConfig.default_value_for_type(:boolean)
+      false
+
+      iex> AshPhoenixGenApi.JsonConfig.default_value_for_type(:datetime)
+      ""
+
+      iex> AshPhoenixGenApi.JsonConfig.default_value_for_type(:naive_datetime)
+      ""
+
+      iex> AshPhoenixGenApi.JsonConfig.default_value_for_type(:map)
+      %{}
+
+      iex> AshPhoenixGenApi.JsonConfig.default_value_for_type(:list)
+      []
+
       iex> AshPhoenixGenApi.JsonConfig.default_value_for_type({:list_string, 100, 50})
       []
 
       iex> AshPhoenixGenApi.JsonConfig.default_value_for_type({:list_num, 100})
       []
+
+      iex> AshPhoenixGenApi.JsonConfig.default_value_for_type({:string, 255})
+      ""
+
+      iex> AshPhoenixGenApi.JsonConfig.default_value_for_type({:map, 100})
+      %{}
+
+      iex> AshPhoenixGenApi.JsonConfig.default_value_for_type({:list, 100})
+      []
   """
   @spec default_value_for_type(atom() | tuple()) :: term()
   def default_value_for_type(:string), do: ""
+  def default_value_for_type({:string, _}), do: ""
   def default_value_for_type(:num), do: 0
+  def default_value_for_type(:boolean), do: false
+  def default_value_for_type(:datetime), do: ""
+  def default_value_for_type(:naive_datetime), do: ""
+  def default_value_for_type(:map), do: %{}
+  def default_value_for_type({:map, _}), do: %{}
+  def default_value_for_type(:list), do: []
+  def default_value_for_type({:list, _}), do: []
   def default_value_for_type({:list_string, _, _}), do: []
   def default_value_for_type({:list_num, _}), do: []
   def default_value_for_type(_), do: ""

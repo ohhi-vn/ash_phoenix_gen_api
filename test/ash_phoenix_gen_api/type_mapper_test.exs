@@ -19,6 +19,14 @@ defmodule AshPhoenixGenApi.TypeMapperTest do
     test "maps Ash.Type.CiString to :string" do
       assert TypeMapper.to_gen_api_type(Ash.Type.CiString) == :string
     end
+
+    test "maps :string with max_length constraint to {:string, max_bytes}" do
+      assert TypeMapper.to_gen_api_type(:string, max_length: 255) == {:string, 255}
+    end
+
+    test "maps Ash.Type.String with max_length constraint to {:string, max_bytes}" do
+      assert TypeMapper.to_gen_api_type(Ash.Type.String, max_length: 100) == {:string, 100}
+    end
   end
 
   describe "to_gen_api_type/1 - numeric types" do
@@ -70,24 +78,52 @@ defmodule AshPhoenixGenApi.TypeMapperTest do
       assert TypeMapper.to_gen_api_type(:time) == :string
     end
 
-    test "maps :datetime to :string" do
-      assert TypeMapper.to_gen_api_type(:datetime) == :string
+    test "maps :datetime to :datetime" do
+      assert TypeMapper.to_gen_api_type(:datetime) == :datetime
     end
 
-    test "maps :utc_datetime to :string" do
-      assert TypeMapper.to_gen_api_type(:utc_datetime) == :string
+    test "maps :utc_datetime to :datetime" do
+      assert TypeMapper.to_gen_api_type(:utc_datetime) == :datetime
     end
 
-    test "maps :naive_datetime to :string" do
-      assert TypeMapper.to_gen_api_type(:naive_datetime) == :string
+    test "maps :utc_datetime_usec to :datetime" do
+      assert TypeMapper.to_gen_api_type(:utc_datetime_usec) == :datetime
     end
 
-    test "maps Ash.Type.UtcDateTime to :string" do
-      assert TypeMapper.to_gen_api_type(Ash.Type.UtcDateTime) == :string
+    test "maps :naive_datetime to :naive_datetime" do
+      assert TypeMapper.to_gen_api_type(:naive_datetime) == :naive_datetime
     end
 
-    test "maps Ash.Type.NaiveDateTime to :string" do
-      assert TypeMapper.to_gen_api_type(Ash.Type.NaiveDateTime) == :string
+    test "maps :naive_datetime_usec to :naive_datetime" do
+      assert TypeMapper.to_gen_api_type(:naive_datetime_usec) == :naive_datetime
+    end
+
+    test "maps Ash.Type.DateTime to :datetime" do
+      assert TypeMapper.to_gen_api_type(Ash.Type.DateTime) == :datetime
+    end
+
+    test "maps Ash.Type.UtcDateTime to :datetime" do
+      assert TypeMapper.to_gen_api_type(Ash.Type.UtcDateTime) == :datetime
+    end
+
+    test "maps Ash.Type.UtcDateTimeUsec to :datetime" do
+      assert TypeMapper.to_gen_api_type(Ash.Type.UtcDateTimeUsec) == :datetime
+    end
+
+    test "maps Ash.Type.NaiveDateTime to :naive_datetime" do
+      assert TypeMapper.to_gen_api_type(Ash.Type.NaiveDateTime) == :naive_datetime
+    end
+
+    test "maps Ash.Type.NaiveDateTimeUsec to :naive_datetime" do
+      assert TypeMapper.to_gen_api_type(Ash.Type.NaiveDateTimeUsec) == :naive_datetime
+    end
+
+    test "maps :duration to :string" do
+      assert TypeMapper.to_gen_api_type(:duration) == :string
+    end
+
+    test "maps :duration_name to :string" do
+      assert TypeMapper.to_gen_api_type(:duration_name) == :string
     end
   end
 
@@ -112,24 +148,36 @@ defmodule AshPhoenixGenApi.TypeMapperTest do
   end
 
   describe "to_gen_api_type/1 - map/json/struct types" do
-    test "maps :map to :string" do
-      assert TypeMapper.to_gen_api_type(:map) == :string
+    test "maps :map to :map" do
+      assert TypeMapper.to_gen_api_type(:map) == :map
     end
 
-    test "maps Ash.Type.Map to :string" do
-      assert TypeMapper.to_gen_api_type(Ash.Type.Map) == :string
+    test "maps :map with max_items constraint to {:map, max_items}" do
+      assert TypeMapper.to_gen_api_type(:map, max_items: 50) == {:map, 50}
     end
 
-    test "maps Ash.Type.Json to :string" do
-      assert TypeMapper.to_gen_api_type(Ash.Type.Json) == :string
+    test "maps Ash.Type.Map to :map" do
+      assert TypeMapper.to_gen_api_type(Ash.Type.Map) == :map
     end
 
-    test "maps :struct to :string" do
-      assert TypeMapper.to_gen_api_type(:struct) == :string
+    test "maps Ash.Type.Json to :map" do
+      assert TypeMapper.to_gen_api_type(Ash.Type.Json) == :map
     end
 
-    test "maps :keyword to :string" do
-      assert TypeMapper.to_gen_api_type(:keyword) == :string
+    test "maps :struct to :map" do
+      assert TypeMapper.to_gen_api_type(:struct) == :map
+    end
+
+    test "maps Ash.Type.Struct to :map" do
+      assert TypeMapper.to_gen_api_type(Ash.Type.Struct) == :map
+    end
+
+    test "maps :keyword to :map" do
+      assert TypeMapper.to_gen_api_type(:keyword) == :map
+    end
+
+    test "maps Ash.Type.Keyword to :map" do
+      assert TypeMapper.to_gen_api_type(Ash.Type.Keyword) == :map
     end
   end
 
@@ -174,16 +222,26 @@ defmodule AshPhoenixGenApi.TypeMapperTest do
                {:list_num, 1000}
     end
 
-    test "maps {:array, :boolean} to {:list_string, max_items, max_item_length}" do
-      # boolean maps to :string, so array of boolean maps to list_string
+    test "maps {:array, :boolean} to {:list, max_items}" do
+      # boolean maps to :boolean, so array of boolean maps to {:list, max_items}
       assert TypeMapper.to_gen_api_type({:array, :boolean}) ==
-               {:list_string, 1000, 50}
+               {:list, 1000}
     end
 
-    test "maps {:array, :map} to {:list_string, max_items, max_item_length}" do
-      # map maps to :string, so array of map maps to list_string
+    test "maps {:array, :map} to {:list, max_items}" do
+      # map maps to :map, so array of map maps to {:list, max_items}
       assert TypeMapper.to_gen_api_type({:array, :map}) ==
-               {:list_string, 1000, 50}
+               {:list, 1000}
+    end
+
+    test "maps {:array, :datetime} to {:list, max_items}" do
+      assert TypeMapper.to_gen_api_type({:array, :datetime}) ==
+               {:list, 1000}
+    end
+
+    test "maps {:array, :naive_datetime} to {:list, max_items}" do
+      assert TypeMapper.to_gen_api_type({:array, :naive_datetime}) ==
+               {:list, 1000}
     end
 
     test "respects max_items constraint" do
@@ -194,6 +252,11 @@ defmodule AshPhoenixGenApi.TypeMapperTest do
     test "respects max_item_length constraint for string arrays" do
       assert TypeMapper.to_gen_api_type({:array, :string}, items: [max_length: 100]) ==
                {:list_string, 1000, 100}
+    end
+
+    test "respects max_items constraint for list type" do
+      assert TypeMapper.to_gen_api_type({:array, :map}, max_items: 200) ==
+               {:list, 200}
     end
   end
 
@@ -231,6 +294,10 @@ defmodule AshPhoenixGenApi.TypeMapperTest do
 
     test "default_max_string_item_length returns 50" do
       assert TypeMapper.default_max_string_item_length() == 50
+    end
+
+    test "default_max_map_items returns 1000" do
+      assert TypeMapper.default_max_map_items() == 1000
     end
   end
 end

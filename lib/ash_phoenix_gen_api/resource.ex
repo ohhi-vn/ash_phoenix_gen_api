@@ -237,11 +237,19 @@ defmodule AshPhoenixGenApi.Resource do
 
         Keys are argument name strings, values are PhoenixGenApi type atoms/tuples:
         - `:string` - String values
+        - `{:string, max_bytes}` - String with custom max byte size
         - `:num` - Numeric values
+        - `:boolean` - Boolean values
+        - `:datetime` - ISO 8601 datetime string, auto-converted to DateTime
+        - `:naive_datetime` - ISO 8601 datetime string, auto-converted to NaiveDateTime
+        - `:map` - Generic map
+        - `{:map, max_items}` - Map with max items constraint
+        - `:list` - Generic list
+        - `{:list, max_items}` - List with max items constraint
         - `{:list_string, max_items, max_item_length}` - List of strings
         - `{:list_num, max_items}` - List of numbers
 
-        Example: `%{"user_id" => :string, "count" => :num, "tags" => {:list_string, 1000, 50}}`
+        Example: `%{"user_id" => :string, "count" => :num, "tags" => {:list_string, 1000, 50}, "metadata" => :map, "sent_at" => :datetime}`
         """
       ],
       arg_orders: [
@@ -386,11 +394,19 @@ defmodule AshPhoenixGenApi.Resource do
 
         Keys are argument name strings, values are PhoenixGenApi type atoms/tuples:
         - `:string` - String values
+        - `{:string, max_bytes}` - String with custom max byte size
         - `:num` - Numeric values
+        - `:boolean` - Boolean values
+        - `:datetime` - ISO 8601 datetime string, auto-converted to DateTime
+        - `:naive_datetime` - ISO 8601 datetime string, auto-converted to NaiveDateTime
+        - `:map` - Generic map
+        - `{:map, max_items}` - Map with max items constraint
+        - `:list` - Generic list
+        - `{:list, max_items}` - List with max items constraint
         - `{:list_string, max_items, max_item_length}` - List of strings
         - `{:list_num, max_items}` - List of numbers
 
-        Example: `%{"user_id" => :string, "count" => :num, "tags" => {:list_string, 1000, 50}}`
+        Example: `%{"user_id" => :string, "count" => :num, "tags" => {:list_string, 1000, 50}, "metadata" => :map, "sent_at" => :datetime}`
         """
       ],
       arg_orders: [

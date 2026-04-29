@@ -25,3 +25,4 @@ ash_phoenix_gen_api-*.tar
 .expert
 .dexter.db*
 .claude/
+.DS_Store
