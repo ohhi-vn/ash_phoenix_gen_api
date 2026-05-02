@@ -57,7 +57,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
   by the domain-level supporter module to aggregate FunConfigs.
 
   Additionally, for each action with `code_interface?` enabled, the following
-  functions are generated. All functions use `Ash.CodeInterface.params_and_opts/2`
+  functions are generated. All functions use `CodeInterface.params_and_opts/2`
   to properly disambiguate between args maps and opts keyword lists, allowing
   callers to pass just opts (e.g., `action(actor: user)`) without wrapping
   them in a second argument.
@@ -65,80 +65,86 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
   ### Create actions
 
       def create_action(params_or_opts \\\\ [], opts \\\\ []) do
-        {args, opts} = Ash.CodeInterface.params_and_opts(params_or_opts, opts)
-        Ash.Changeset.for_create(__MODULE__, :create_action, args, opts)
+        {args, opts} = CodeInterface.params_and_opts(params_or_opts, opts)
+        Changeset.for_create(__MODULE__, :create_action, args, opts)
         |> Ash.create(opts)
       end
 
       def create_action!(params_or_opts \\\\ [], opts \\\\ []) do
-        {args, opts} = Ash.CodeInterface.params_and_opts(params_or_opts, opts)
-        Ash.Changeset.for_create(__MODULE__, :create_action, args, opts)
+        {args, opts} = CodeInterface.params_and_opts(params_or_opts, opts)
+        Changeset.for_create(__MODULE__, :create_action, args, opts)
         |> Ash.create!(opts)
       end
 
   ### Read actions
 
       def read_action(params_or_opts \\\\ [], opts \\\\ []) do
-        {args, opts} = Ash.CodeInterface.params_and_opts(params_or_opts, opts)
-        Ash.Query.for_read(__MODULE__, :read_action, args, opts)
+        {args, opts} = CodeInterface.params_and_opts(params_or_opts, opts)
+        Query.for_read(__MODULE__, :read_action, args, opts)
         |> Ash.read(opts)
       end
 
       def read_action!(params_or_opts \\\\ [], opts \\\\ []) do
-        {args, opts} = Ash.CodeInterface.params_and_opts(params_or_opts, opts)
-        Ash.Query.for_read(__MODULE__, :read_action, args, opts)
+        {args, opts} = CodeInterface.params_and_opts(params_or_opts, opts)
+        Query.for_read(__MODULE__, :read_action, args, opts)
         |> Ash.read!(opts)
       end
 
   ### Update actions (require a record as first argument)
 
       def update_action(record, params_or_opts \\\\ [], opts \\\\ []) do
-        {args, opts} = Ash.CodeInterface.params_and_opts(params_or_opts, opts)
-        Ash.Changeset.for_update(record, :update_action, args, opts)
+        {args, opts} = CodeInterface.params_and_opts(params_or_opts, opts)
+        Changeset.for_update(record, :update_action, args, opts)
         |> Ash.update(opts)
       end
 
       def update_action!(record, params_or_opts \\\\ [], opts \\\\ []) do
-        {args, opts} = Ash.CodeInterface.params_and_opts(params_or_opts, opts)
-        Ash.Changeset.for_update(record, :update_action, args, opts)
+        {args, opts} = CodeInterface.params_and_opts(params_or_opts, opts)
+        Changeset.for_update(record, :update_action, args, opts)
         |> Ash.update!(opts)
       end
 
   ### Destroy actions (require a record as first argument)
 
       def destroy_action(record, params_or_opts \\\\ [], opts \\\\ []) do
-        {args, opts} = Ash.CodeInterface.params_and_opts(params_or_opts, opts)
-        Ash.Changeset.for_destroy(record, :destroy_action, args, opts)
+        {args, opts} = CodeInterface.params_and_opts(params_or_opts, opts)
+        Changeset.for_destroy(record, :destroy_action, args, opts)
         |> Ash.destroy(opts)
       end
 
       def destroy_action!(record, params_or_opts \\\\ [], opts \\\\ []) do
-        {args, opts} = Ash.CodeInterface.params_and_opts(params_or_opts, opts)
-        Ash.Changeset.for_destroy(record, :destroy_action, args, opts)
+        {args, opts} = CodeInterface.params_and_opts(params_or_opts, opts)
+        Changeset.for_destroy(record, :destroy_action, args, opts)
         |> Ash.destroy!(opts)
       end
 
   ### Generic actions
 
       def generic_action(params_or_opts \\\\ [], opts \\\\ []) do
-        {args, opts} = Ash.CodeInterface.params_and_opts(params_or_opts, opts)
-        Ash.ActionInput.for_action(__MODULE__, :generic_action, args, opts)
+        {args, opts} = CodeInterface.params_and_opts(params_or_opts, opts)
+        ActionInput.for_action(__MODULE__, :generic_action, args, opts)
         |> Ash.run_action(opts)
       end
 
       def generic_action!(params_or_opts \\\\ [], opts \\\\ []) do
-        {args, opts} = Ash.CodeInterface.params_and_opts(params_or_opts, opts)
-        Ash.ActionInput.for_action(__MODULE__, :generic_action, args, opts)
+        {args, opts} = CodeInterface.params_and_opts(params_or_opts, opts)
+        ActionInput.for_action(__MODULE__, :generic_action, args, opts)
         |> Ash.run_action!(opts)
       end
   """
 
   use Spark.Dsl.Transformer
 
+  alias Spark.Dsl.Transformer, as: SparkTransformer
+  alias Ash.CodeInterface
+  alias Ash.Changeset
+  alias Ash.Query
+  alias Ash.ActionInput
   alias AshPhoenixGenApi.Resource.Info
   alias AshPhoenixGenApi.Resource.ActionConfig
   alias AshPhoenixGenApi.Resource.MfaConfig
   alias AshPhoenixGenApi.TypeMapper
+  alias Ash.Resource.Info, as: ResourceAshInfo
 
   @doc """
   Runs after all other transformers so that Ash action info is fully available.
@@ -154,7 +160,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
 
   @impl true
   def transform(dsl_state) do
-    resource = Spark.Dsl.Transformer.get_persisted(dsl_state, :module)
+    resource = SparkTransformer.get_persisted(dsl_state, :module)
     entities = Info.gen_api(dsl_state)
 
     # Separate action and mfa entities by struct type
@@ -164,10 +170,15 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
     if entities == [] do
       # No gen_api actions configured — define empty function for safe introspection
       dsl_state =
-        Spark.Dsl.Transformer.eval(
+        SparkTransformer.eval(
           dsl_state,
           [],
           quote do
+            alias CodeInterface
+            alias Changeset
+            alias Query
+            alias ActionInput
+
             @doc false
             def __ash_phoenix_gen_api_fun_configs__ do
               []
@@ -210,10 +221,15 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
         end)
 
       dsl_state =
-        Spark.Dsl.Transformer.eval(
+        SparkTransformer.eval(
           dsl_state,
           [],
           quote do
+            alias CodeInterface
+            alias Changeset
+            alias Query
+            alias ActionInput
+
             @doc false
             def __ash_phoenix_gen_api_fun_configs__ do
               unquote(fun_configs_escaped)
@@ -403,7 +419,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
   end
 
   defp get_action_fields(_resource, action_name, dsl_state) do
-    action = Ash.Resource.Info.action(dsl_state, action_name)
+    action = ResourceAshInfo.action(dsl_state, action_name)
 
     if is_nil(action) do
       []
@@ -493,10 +509,10 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
   defp build_create_interface(action_name, bang_name, action_type, result_encoder) do
     doc_string =
       "Auto-generated code interface for the `:#{action_name}` gen_api action (#{action_type}).\n\n" <>
-        "Calls `Ash.Changeset.for_create/4` then `Ash.create/2`.\n\n" <>
+        "Calls `Changeset.for_create/4` then `Ash.create/2`.\n\n" <>
         "## Parameters\n" <>
         "  - `params_or_opts` - A map of arguments matching the action's accepted attributes and arguments,\n" <>
-        "    or a keyword list of options. Uses `Ash.CodeInterface.params_and_opts/2` for disambiguation.\n" <>
+        "    or a keyword list of options. Uses `CodeInterface.params_and_opts/2` for disambiguation.\n" <>
         "  - `opts` - Keyword options passed to both `for_create` and `create`:\n" <>
         "    - `:actor` - The actor for authorization\n" <>
         "    - `:tenant` - The tenant for multitenancy\n" <>
@@ -516,8 +532,8 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
       quote do
         @doc unquote(doc_string)
         def unquote(action_name)(params_or_opts \\ [], opts \\ []) do
-          {args, opts} = Ash.CodeInterface.params_and_opts(params_or_opts, opts)
-          Ash.Changeset.for_create(__MODULE__, unquote(action_name), args, opts)
+          {args, opts} = CodeInterface.params_and_opts(params_or_opts, opts)
+          Changeset.for_create(__MODULE__, unquote(action_name), args, opts)
           |> Ash.create(opts)
           |> AshPhoenixGenApi.Codec.encode_result(unquote(result_encoder_escaped))
         end
@@ -525,8 +541,8 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
       quote do
         @doc unquote(bang_doc_string)
         def unquote(bang_name)(params_or_opts \\ [], opts \\ []) do
-          {args, opts} = Ash.CodeInterface.params_and_opts(params_or_opts, opts)
-          Ash.Changeset.for_create(__MODULE__, unquote(action_name), args, opts)
+          {args, opts} = CodeInterface.params_and_opts(params_or_opts, opts)
+          Changeset.for_create(__MODULE__, unquote(action_name), args, opts)
           |> Ash.create!(opts)
           |> AshPhoenixGenApi.Codec.encode_value(unquote(result_encoder_escaped))
         end
@@ -537,10 +553,10 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
   defp build_read_interface(action_name, bang_name, action_type, result_encoder) do
     doc_string =
       "Auto-generated code interface for the `:#{action_name}` gen_api action (#{action_type}).\n\n" <>
-        "Calls `Ash.Query.for_read/4` then `Ash.read/2`.\n\n" <>
+        "Calls `Query.for_read/4` then `Ash.read/2`.\n\n" <>
         "## Parameters\n" <>
         "  - `params_or_opts` - A map of arguments matching the action's arguments,\n" <>
-        "    or a keyword list of options. Uses `Ash.CodeInterface.params_and_opts/2` for disambiguation.\n" <>
+        "    or a keyword list of options. Uses `CodeInterface.params_and_opts/2` for disambiguation.\n" <>
         "  - `opts` - Keyword options passed to both `for_read` and `read`:\n" <>
         "    - `:actor` - The actor for authorization\n" <>
         "    - `:tenant` - The tenant for multitenancy\n" <>
@@ -560,8 +576,8 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
       quote do
         @doc unquote(doc_string)
         def unquote(action_name)(params_or_opts \\ [], opts \\ []) do
-          {args, opts} = Ash.CodeInterface.params_and_opts(params_or_opts, opts)
-          Ash.Query.for_read(__MODULE__, unquote(action_name), args, opts)
+          {args, opts} = CodeInterface.params_and_opts(params_or_opts, opts)
+          Query.for_read(__MODULE__, unquote(action_name), args, opts)
           |> Ash.read(opts)
           |> AshPhoenixGenApi.Codec.encode_result(unquote(result_encoder_escaped))
         end
@@ -569,8 +585,8 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
       quote do
         @doc unquote(bang_doc_string)
         def unquote(bang_name)(params_or_opts \\ [], opts \\ []) do
-          {args, opts} = Ash.CodeInterface.params_and_opts(params_or_opts, opts)
-          Ash.Query.for_read(__MODULE__, unquote(action_name), args, opts)
+          {args, opts} = CodeInterface.params_and_opts(params_or_opts, opts)
+          Query.for_read(__MODULE__, unquote(action_name), args, opts)
           |> Ash.read!(opts)
           |> AshPhoenixGenApi.Codec.encode_value(unquote(result_encoder_escaped))
         end
@@ -581,11 +597,11 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
   defp build_update_interface(action_name, bang_name, action_type, result_encoder) do
     doc_string =
       "Auto-generated code interface for the `:#{action_name}` gen_api action (#{action_type}).\n\n" <>
-        "Calls `Ash.Changeset.for_update/4` then `Ash.update/2`.\n\n" <>
+        "Calls `Changeset.for_update/4` then `Ash.update/2`.\n\n" <>
         "## Parameters\n" <>
         "  - `record` - The existing record to update\n" <>
         "  - `params_or_opts` - A map of arguments matching the action's accepted attributes and arguments,\n" <>
-        "    or a keyword list of options. Uses `Ash.CodeInterface.params_and_opts/2` for disambiguation.\n" <>
+        "    or a keyword list of options. Uses `CodeInterface.params_and_opts/2` for disambiguation.\n" <>
         "  - `opts` - Keyword options passed to both `for_update` and `update`:\n" <>
         "    - `:actor` - The actor for authorization\n" <>
         "    - `:tenant` - The tenant for multitenancy\n" <>
@@ -605,8 +621,8 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
       quote do
         @doc unquote(doc_string)
         def unquote(action_name)(record, params_or_opts \\ [], opts \\ []) do
-          {args, opts} = Ash.CodeInterface.params_and_opts(params_or_opts, opts)
-          Ash.Changeset.for_update(record, unquote(action_name), args, opts)
+          {args, opts} = CodeInterface.params_and_opts(params_or_opts, opts)
+          Changeset.for_update(record, unquote(action_name), args, opts)
           |> Ash.update(opts)
           |> AshPhoenixGenApi.Codec.encode_result(unquote(result_encoder_escaped))
         end
@@ -614,8 +630,8 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
       quote do
         @doc unquote(bang_doc_string)
         def unquote(bang_name)(record, params_or_opts \\ [], opts \\ []) do
-          {args, opts} = Ash.CodeInterface.params_and_opts(params_or_opts, opts)
-          Ash.Changeset.for_update(record, unquote(action_name), args, opts)
+          {args, opts} = CodeInterface.params_and_opts(params_or_opts, opts)
+          Changeset.for_update(record, unquote(action_name), args, opts)
           |> Ash.update!(opts)
           |> AshPhoenixGenApi.Codec.encode_value(unquote(result_encoder_escaped))
         end
@@ -626,11 +642,11 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
   defp build_destroy_interface(action_name, bang_name, action_type, result_encoder) do
     doc_string =
       "Auto-generated code interface for the `:#{action_name}` gen_api action (#{action_type}).\n\n" <>
-        "Calls `Ash.Changeset.for_destroy/4` then `Ash.destroy/2`.\n\n" <>
+        "Calls `Changeset.for_destroy/4` then `Ash.destroy/2`.\n\n" <>
         "## Parameters\n" <>
         "  - `record` - The record to destroy\n" <>
         "  - `params_or_opts` - A map of arguments matching the action's arguments,\n" <>
-        "    or a keyword list of options. Uses `Ash.CodeInterface.params_and_opts/2` for disambiguation.\n" <>
+        "    or a keyword list of options. Uses `CodeInterface.params_and_opts/2` for disambiguation.\n" <>
         "  - `opts` - Keyword options passed to both `for_destroy` and `destroy`:\n" <>
         "    - `:actor` - The actor for authorization\n" <>
         "    - `:tenant` - The tenant for multitenancy\n" <>
@@ -650,8 +666,8 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
       quote do
         @doc unquote(doc_string)
         def unquote(action_name)(record, params_or_opts \\ [], opts \\ []) do
-          {args, opts} = Ash.CodeInterface.params_and_opts(params_or_opts, opts)
-          Ash.Changeset.for_destroy(record, unquote(action_name), args, opts)
+          {args, opts} = CodeInterface.params_and_opts(params_or_opts, opts)
+          Changeset.for_destroy(record, unquote(action_name), args, opts)
           |> Ash.destroy(opts)
           |> AshPhoenixGenApi.Codec.encode_result(unquote(result_encoder_escaped))
         end
@@ -659,8 +675,8 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
       quote do
         @doc unquote(bang_doc_string)
         def unquote(bang_name)(record, params_or_opts \\ [], opts \\ []) do
-          {args, opts} = Ash.CodeInterface.params_and_opts(params_or_opts, opts)
-          Ash.Changeset.for_destroy(record, unquote(action_name), args, opts)
+          {args, opts} = CodeInterface.params_and_opts(params_or_opts, opts)
+          Changeset.for_destroy(record, unquote(action_name), args, opts)
           |> Ash.destroy!(opts)
           |> AshPhoenixGenApi.Codec.encode_value(unquote(result_encoder_escaped))
         end
@@ -671,10 +687,10 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
   defp build_generic_interface(action_name, bang_name, action_type, result_encoder) do
     doc_string =
       "Auto-generated code interface for the `:#{action_name}` gen_api action (#{action_type}).\n\n" <>
-        "Calls `Ash.ActionInput.for_action/4` then `Ash.run_action/2`.\n\n" <>
+        "Calls `ActionInput.for_action/4` then `Ash.run_action/2`.\n\n" <>
         "## Parameters\n" <>
         "  - `params_or_opts` - A map of arguments matching the action's arguments,\n" <>
-        "    or a keyword list of options. Uses `Ash.CodeInterface.params_and_opts/2` for disambiguation.\n" <>
+        "    or a keyword list of options. Uses `CodeInterface.params_and_opts/2` for disambiguation.\n" <>
         "  - `opts` - Keyword options passed to both `for_action` and `run_action`:\n" <>
         "    - `:actor` - The actor for authorization\n" <>
         "    - `:tenant` - The tenant for multitenancy\n" <>
@@ -694,8 +710,8 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
       quote do
         @doc unquote(doc_string)
         def unquote(action_name)(params_or_opts \\ [], opts \\ []) do
-          {args, opts} = Ash.CodeInterface.params_and_opts(params_or_opts, opts)
-          Ash.ActionInput.for_action(__MODULE__, unquote(action_name), args, opts)
+          {args, opts} = CodeInterface.params_and_opts(params_or_opts, opts)
+          ActionInput.for_action(__MODULE__, unquote(action_name), args, opts)
           |> Ash.run_action(opts)
           |> AshPhoenixGenApi.Codec.encode_result(unquote(result_encoder_escaped))
         end
@@ -703,8 +719,8 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
       quote do
         @doc unquote(bang_doc_string)
         def unquote(bang_name)(params_or_opts \\ [], opts \\ []) do
-          {args, opts} = Ash.CodeInterface.params_and_opts(params_or_opts, opts)
-          Ash.ActionInput.for_action(__MODULE__, unquote(action_name), args, opts)
+          {args, opts} = CodeInterface.params_and_opts(params_or_opts, opts)
+          ActionInput.for_action(__MODULE__, unquote(action_name), args, opts)
           |> Ash.run_action!(opts)
           |> AshPhoenixGenApi.Codec.encode_value(unquote(result_encoder_escaped))
         end

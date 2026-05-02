@@ -34,13 +34,15 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyActionConfigs do
 
   use Spark.Dsl.Verifier
 
+  alias Spark.Dsl.Verifier, as: SparkVerifier
   alias AshPhoenixGenApi.Resource.Info
   alias AshPhoenixGenApi.Resource.ActionConfig
   alias AshPhoenixGenApi.Resource.MfaConfig
+  alias Ash.Resource.Info, as: ResourceAshInfo
 
   @impl true
   def verify(dsl_state) do
-    resource = Spark.Dsl.Verifier.get_persisted(dsl_state, :module)
+    resource = SparkVerifier.get_persisted(dsl_state, :module)
     entities = Info.gen_api(dsl_state)
 
     # Separate action and mfa entities by struct type
@@ -64,7 +66,7 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyActionConfigs do
   # ---------------------------------------------------------------------------
 
   defp verify_actions_exist(dsl_state, resource, actions) do
-    resource_actions = Ash.Resource.Info.actions(dsl_state)
+    resource_actions = ResourceAshInfo.actions(dsl_state)
 
     resource_action_names =
       resource_actions
@@ -195,124 +197,8 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyActionConfigs do
   # ---------------------------------------------------------------------------
 
   defp verify_arg_consistency(resource, actions, mfas) do
-    action_errors =
-      actions
-      |> Enum.flat_map(fn action_config ->
-        arg_types = action_config.arg_types
-        arg_orders = action_config.arg_orders
-
-        cond do
-          # Both provided — check keys match
-          is_map(arg_types) and map_size(arg_types) > 0 and
-              is_list(arg_orders) and arg_orders != [] ->
-            arg_type_keys = MapSet.new(Map.keys(arg_types))
-            arg_order_keys = MapSet.new(arg_orders)
-
-            missing_in_orders = MapSet.difference(arg_type_keys, arg_order_keys)
-            missing_in_types = MapSet.difference(arg_order_keys, arg_type_keys)
-
-            errors = []
-
-            errors =
-              if MapSet.size(missing_in_orders) > 0 do
-                [
-                  "Action `#{action_config.name}`: arg_types has keys " <>
-                    "#{inspect(MapSet.to_list(missing_in_orders))} that are missing from arg_orders"
-                  | errors
-                ]
-              else
-                errors
-              end
-
-            errors =
-              if MapSet.size(missing_in_types) > 0 do
-                [
-                  "Action `#{action_config.name}`: arg_orders has keys " <>
-                    "#{inspect(MapSet.to_list(missing_in_types))} that are missing from arg_types"
-                  | errors
-                ]
-              else
-                errors
-              end
-
-            errors
-
-          # Only arg_types provided — arg_orders will be derived from keys, so OK
-          is_map(arg_types) and map_size(arg_types) > 0 ->
-            []
-
-          # Only arg_orders provided without arg_types — can't determine types
-          (is_nil(arg_types) or (is_map(arg_types) and map_size(arg_types) == 0)) and
-              is_list(arg_orders) and arg_orders != [] ->
-            [
-              "Action `#{action_config.name}`: arg_orders is provided but arg_types is not. " <>
-                "Please also provide arg_types, or remove arg_orders to auto-derive both from the Ash action."
-            ]
-
-          true ->
-            []
-        end
-      end)
-
-    mfa_errors =
-      mfas
-      |> Enum.flat_map(fn mfa_config ->
-        arg_types = mfa_config.arg_types
-        arg_orders = mfa_config.arg_orders
-
-        cond do
-          # Both provided — check keys match
-          is_map(arg_types) and map_size(arg_types) > 0 and
-              is_list(arg_orders) and arg_orders != [] ->
-            arg_type_keys = MapSet.new(Map.keys(arg_types))
-            arg_order_keys = MapSet.new(arg_orders)
-
-            missing_in_orders = MapSet.difference(arg_type_keys, arg_order_keys)
-            missing_in_types = MapSet.difference(arg_order_keys, arg_type_keys)
-
-            errors = []
-
-            errors =
-              if MapSet.size(missing_in_orders) > 0 do
-                [
-                  "MFA `#{mfa_config.name}`: arg_types has keys " <>
-                    "#{inspect(MapSet.to_list(missing_in_orders))} that are missing from arg_orders"
-                  | errors
-                ]
-              else
-                errors
-              end
-
-            errors =
-              if MapSet.size(missing_in_types) > 0 do
-                [
-                  "MFA `#{mfa_config.name}`: arg_orders has keys " <>
-                    "#{inspect(MapSet.to_list(missing_in_types))} that are missing from arg_types"
-                  | errors
-                ]
-              else
-                errors
-              end
-
-            errors
-
-          # Only arg_types provided with arg_orders as :map — OK
-          is_map(arg_types) and map_size(arg_types) > 0 ->
-            []
-
-          # Only arg_orders provided without arg_types — error for mfa entities
-          (is_nil(arg_types) or (is_map(arg_types) and map_size(arg_types) == 0)) and
-              is_list(arg_orders) and arg_orders != [] ->
-            [
-              "MFA `#{mfa_config.name}`: arg_orders is provided but arg_types is not. " <>
-                "arg_types is required for mfa entities."
-            ]
-
-          true ->
-            []
-        end
-      end)
-
+    action_errors = check_action_arg_consistency(actions)
+    mfa_errors = check_mfa_arg_consistency(mfas)
     errors = action_errors ++ mfa_errors
 
     if errors == [] do
@@ -327,6 +213,110 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyActionConfigs do
         #{Enum.join(errors, "\n\n")}
         """
     end
+  end
+
+  defp check_action_arg_consistency(actions) do
+    actions
+    |> Enum.flat_map(fn action_config ->
+      arg_types = action_config.arg_types
+      arg_orders = action_config.arg_orders
+
+      cond do
+        # Both provided — check keys match
+        has_both_arg_configs?(arg_types, arg_orders) ->
+          check_arg_keys_match(action_config.name, arg_types, arg_orders, "Action")
+
+        # Only arg_types provided — arg_orders will be derived from keys, so OK
+        has_only_arg_types?(arg_types) ->
+          []
+
+        # Only arg_orders provided without arg_types — can't determine types
+        has_only_arg_orders?(arg_types, arg_orders) ->
+          [
+            "Action `#{action_config.name}`: arg_orders is provided but arg_types is not. " <>
+              "Please also provide arg_types, or remove arg_orders to auto-derive both from the Ash action."
+          ]
+
+        true ->
+          []
+      end
+    end)
+  end
+
+  defp check_mfa_arg_consistency(mfas) do
+    mfas
+    |> Enum.flat_map(fn mfa_config ->
+      arg_types = mfa_config.arg_types
+      arg_orders = mfa_config.arg_orders
+
+      cond do
+        # Both provided — check keys match
+        has_both_arg_configs?(arg_types, arg_orders) ->
+          check_arg_keys_match(mfa_config.name, arg_types, arg_orders, "MFA")
+
+        # Only arg_types provided with arg_orders as :map — OK
+        has_only_arg_types?(arg_types) ->
+          []
+
+        # Only arg_orders provided without arg_types — error for mfa entities
+        has_only_arg_orders?(arg_types, arg_orders) ->
+          [
+            "MFA `#{mfa_config.name}`: arg_orders is provided but arg_types is not. " <>
+              "arg_types is required for mfa entities."
+          ]
+
+        true ->
+          []
+      end
+    end)
+  end
+
+  defp has_both_arg_configs?(arg_types, arg_orders) do
+    is_map(arg_types) and map_size(arg_types) > 0 and
+      is_list(arg_orders) and arg_orders != []
+  end
+
+  defp has_only_arg_types?(arg_types) do
+    is_map(arg_types) and map_size(arg_types) > 0
+  end
+
+  defp has_only_arg_orders?(arg_types, arg_orders) do
+    (is_nil(arg_types) or (is_map(arg_types) and map_size(arg_types) == 0)) and
+      is_list(arg_orders) and arg_orders != []
+  end
+
+  defp check_arg_keys_match(name, arg_types, arg_orders, type) do
+    arg_type_keys = MapSet.new(Map.keys(arg_types))
+    arg_order_keys = MapSet.new(arg_orders)
+
+    missing_in_orders = MapSet.difference(arg_type_keys, arg_order_keys)
+    missing_in_types = MapSet.difference(arg_order_keys, arg_type_keys)
+
+    errors = []
+
+    errors =
+      if MapSet.size(missing_in_orders) > 0 do
+        [
+          "#{type} `#{name}`: arg_types has keys " <>
+            "#{inspect(MapSet.to_list(missing_in_orders))} that are missing from arg_orders"
+          | errors
+        ]
+      else
+        errors
+      end
+
+    errors =
+      if MapSet.size(missing_in_types) > 0 do
+        [
+          "#{type} `#{name}`: arg_orders has keys " <>
+            "#{inspect(MapSet.to_list(missing_in_types))} that are missing from arg_types"
+          | errors
+        ]
+      else
+        errors
+      end
+
+    errors
   end
 
   # ---------------------------------------------------------------------------
@@ -392,23 +382,13 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyActionConfigs do
   end
 
   defp permission_arg_exists_in_action?(dsl_state, action_config, arg_name) do
-    # Check explicit arg_types first
-    if is_map(action_config.arg_types) and Map.has_key?(action_config.arg_types, arg_name) do
-      true
-    else
-      # Check the Ash action's attributes and arguments
-      ash_action = Ash.Resource.Info.action(dsl_state, action_config.name)
-
-      if is_nil(ash_action) do
-        false
-      else
-        arg_exists_in_ash_action?(ash_action, arg_name)
-      end
-    end
+    # Check the Ash action's attributes and arguments
+    ash_action = ResourceAshInfo.action(dsl_state, action_config.name)
+    arg_exists_in_ash_action?(ash_action, arg_name)
   end
 
   defp arg_exists_in_ash_action?(ash_action, arg_name) do
-    arg_name_atom = if is_binary(arg_name), do: String.to_atom(arg_name), else: arg_name
+    arg_name_atom = String.to_atom(arg_name)
 
     # Check action arguments
     in_arguments =
@@ -417,11 +397,11 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyActionConfigs do
 
     # Check accepted attributes (for create/update actions)
     in_accept =
-      case ash_action do
-        %{accept: :*} ->
+      case Map.get(ash_action, :accept) do
+        :* ->
           true
 
-        %{accept: accept_list} when is_list(accept_list) ->
+        accept_list when is_list(accept_list) ->
           arg_name_atom in accept_list
 
         _ ->
@@ -436,47 +416,8 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyActionConfigs do
   # ---------------------------------------------------------------------------
 
   defp verify_mfa_validity(resource, actions, mfas) do
-    action_errors =
-      actions
-      |> Enum.flat_map(fn action_config ->
-        case action_config.mfa do
-          nil ->
-            # Auto-generated MFA — always valid
-            []
-
-          {mod, fun, args} when is_atom(mod) and is_atom(fun) and is_list(args) ->
-            # Valid MFA structure — we don't require the module to be loaded
-            # at compile time because it might not be compiled yet.
-            []
-
-          mfa ->
-            [
-              "Action `#{action_config.name}`: invalid MFA tuple `#{inspect(mfa)}`. " <>
-                "Expected `{module, function, args_list}` where module and function are atoms " <>
-                "and args is a list."
-            ]
-        end
-      end)
-
-    mfa_errors =
-      mfas
-      |> Enum.flat_map(fn mfa_config ->
-        # For mfa entities, the mfa field is required and already validated
-        # in verify_mfa_required_fields. Here we just validate the structure
-        # if it wasn't caught there (defensive check).
-        case mfa_config.mfa do
-          {mod, fun, args} when is_atom(mod) and is_atom(fun) and is_list(args) ->
-            []
-
-          mfa ->
-            [
-              "MFA `#{mfa_config.name}`: invalid MFA tuple `#{inspect(mfa)}`. " <>
-                "Expected `{module, function, args_list}` where module and function are atoms " <>
-                "and args is a list."
-            ]
-        end
-      end)
-
+    action_errors = check_mfa_validity_for_items(actions, "Action")
+    mfa_errors = check_mfa_validity_for_items(mfas, "MFA")
     errors = action_errors ++ mfa_errors
 
     if errors == [] do
@@ -493,52 +434,35 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyActionConfigs do
     end
   end
 
+  defp check_mfa_validity_for_items(items, type) do
+    items
+    |> Enum.flat_map(fn config ->
+      case config.mfa do
+        nil ->
+          # Auto-generated MFA or not applicable — always valid
+          []
+
+        {mod, fun, args} when is_atom(mod) and is_atom(fun) and is_list(args) ->
+          # Valid MFA structure
+          []
+
+        mfa ->
+          [
+            "#{type} `#{config.name}`: invalid MFA tuple `#{inspect(mfa)}`. " <>
+              "Expected `{module, function, args_list}` where module and function are atoms " <>
+              "and args is a list."
+          ]
+      end
+    end)
+  end
+
   # ---------------------------------------------------------------------------
   # Permission callback verification
   # ---------------------------------------------------------------------------
 
   defp verify_permission_callbacks(resource, actions, mfas) do
-    action_errors =
-      actions
-      |> Enum.flat_map(fn action_config ->
-        case action_config.permission_callback do
-          nil ->
-            # No callback — always valid
-            []
-
-          {mod, fun, args} when is_atom(mod) and is_atom(fun) and is_list(args) ->
-            # Valid MFA structure — we don't require the module to be loaded
-            # at compile time because it might not be compiled yet.
-            []
-
-          permission_callback ->
-            [
-              "Action `#{action_config.name}`: invalid permission_callback `#{inspect(permission_callback)}`. " <>
-                "Expected `{Module, :function, []}` where Module and function are atoms " <>
-                "and args is a list, or `nil`."
-            ]
-        end
-      end)
-
-    mfa_errors =
-      mfas
-      |> Enum.flat_map(fn mfa_config ->
-        case mfa_config.permission_callback do
-          nil ->
-            []
-
-          {mod, fun, args} when is_atom(mod) and is_atom(fun) and is_list(args) ->
-            []
-
-          permission_callback ->
-            [
-              "MFA `#{mfa_config.name}`: invalid permission_callback `#{inspect(permission_callback)}`. " <>
-                "Expected `{Module, :function, []}` where Module and function are atoms " <>
-                "and args is a list, or `nil`."
-            ]
-        end
-      end)
-
+    action_errors = check_permission_callback_for_items(actions, "Action")
+    mfa_errors = check_permission_callback_for_items(mfas, "MFA")
     errors = action_errors ++ mfa_errors
 
     if errors == [] do
@@ -553,5 +477,27 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyActionConfigs do
         #{Enum.join(errors, "\n\n")}
         """
     end
+  end
+
+  defp check_permission_callback_for_items(items, type) do
+    items
+    |> Enum.flat_map(fn config ->
+      case config.permission_callback do
+        nil ->
+          # No callback — always valid
+          []
+
+        {mod, fun, args} when is_atom(mod) and is_atom(fun) and is_list(args) ->
+          # Valid MFA structure
+          []
+
+        permission_callback ->
+          [
+            "#{type} `#{config.name}`: invalid permission_callback `#{inspect(permission_callback)}`. " <>
+              "Expected `{Module, :function, []}` where Module and function are atoms " <>
+              "and args is a list, or `nil`."
+          ]
+      end
+    end)
   end
 end

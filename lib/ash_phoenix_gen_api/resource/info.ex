@@ -18,6 +18,7 @@ defmodule AshPhoenixGenApi.Resource.Info do
 
   use Spark.InfoGenerator, extension: AshPhoenixGenApi.Resource, sections: [:gen_api]
 
+  alias Ash.Resource.Info, as: ResourceAshInfo
   alias AshPhoenixGenApi.Resource.ActionConfig
   alias AshPhoenixGenApi.Resource.MfaConfig
 
@@ -91,8 +92,9 @@ defmodule AshPhoenixGenApi.Resource.Info do
   def enabled_actions(resource) when is_atom(resource) do
     resource
     |> gen_api()
-    |> Enum.filter(&match?(%ActionConfig{}, &1))
-    |> Enum.filter(&ActionConfig.enabled?/1)
+    |> Enum.filter(fn x ->
+      match?(%ActionConfig{}, x) and ActionConfig.enabled?(x)
+    end)
   end
 
   @doc """
@@ -134,8 +136,9 @@ defmodule AshPhoenixGenApi.Resource.Info do
   def enabled_mfas(resource) when is_atom(resource) do
     resource
     |> gen_api()
-    |> Enum.filter(&match?(%MfaConfig{}, &1))
-    |> Enum.filter(&MfaConfig.enabled?/1)
+    |> Enum.filter(fn x ->
+      match?(%MfaConfig{}, x) and MfaConfig.enabled?(x)
+    end)
   end
 
   @doc """
@@ -265,7 +268,7 @@ defmodule AshPhoenixGenApi.Resource.Info do
     case Code.ensure_compiled(resource) do
       {:module, _} ->
         try do
-          extensions = Ash.Resource.Info.extensions(resource)
+          extensions = ResourceAshInfo.extensions(resource)
           Enum.any?(extensions, &(&1 == AshPhoenixGenApi.Resource))
         rescue
           _ -> false

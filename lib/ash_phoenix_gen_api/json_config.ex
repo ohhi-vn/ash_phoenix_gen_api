@@ -420,12 +420,10 @@ defmodule AshPhoenixGenApi.JsonConfig do
   #   2. Otherwise, try treating it as a domain via `DomainInfo.fun_configs/1`.
   #   3. If both fail, return an empty list.
   defp get_fun_configs(source) do
-    cond do
-      function_exported?(source, :__ash_phoenix_gen_api_fun_configs__, 0) ->
-        ResourceInfo.fun_configs(source)
-
-      true ->
-        DomainInfo.fun_configs(source)
+    if function_exported?(source, :__ash_phoenix_gen_api_fun_configs__, 0) do
+      ResourceInfo.fun_configs(source)
+    else
+      DomainInfo.fun_configs(source)
     end
   rescue
     _ -> []

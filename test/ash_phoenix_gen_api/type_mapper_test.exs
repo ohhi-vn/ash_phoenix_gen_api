@@ -56,16 +56,16 @@ defmodule AshPhoenixGenApi.TypeMapperTest do
   end
 
   describe "to_gen_api_type/1 - UUID types" do
-    test "maps :uuid to :string" do
-      assert TypeMapper.to_gen_api_type(:uuid) == :string
+    test "maps :uuid to :uuid" do
+      assert TypeMapper.to_gen_api_type(:uuid) == :uuid
     end
 
-    test "maps Ash.Type.UUID to :string" do
-      assert TypeMapper.to_gen_api_type(Ash.Type.UUID) == :string
+    test "maps Ash.Type.UUID to :uuid" do
+      assert TypeMapper.to_gen_api_type(Ash.Type.UUID) == :uuid
     end
 
-    test "maps :uuid_v7 to :string" do
-      assert TypeMapper.to_gen_api_type(:uuid_v7) == :string
+    test "maps :uuid_v7 to :uuid" do
+      assert TypeMapper.to_gen_api_type(:uuid_v7) == :uuid
     end
   end
 

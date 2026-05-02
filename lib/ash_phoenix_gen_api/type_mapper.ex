@@ -1,10 +1,10 @@
 defmodule AshPhoenixGenApi.TypeMapper do
   @moduledoc """
   Maps Ash types to PhoenixGenApi argument types.
-
   PhoenixGenApi supports the following argument types:
 
-  - `:string` - String values (UUIDs, dates, etc.)
+  - `:string` - String values
+  - `:uuid` - UUID values (auto-validated and converted)
   - `{:string, max_bytes}` - String with custom max byte size
   - `:num` - Numeric values (integers, floats)
   - `:boolean` - Boolean values
@@ -17,7 +17,7 @@ defmodule AshPhoenixGenApi.TypeMapper do
   - `{:list_string, max_items, max_item_length}` - Lists of strings with constraints
   - `{:list_num, max_items}` - Lists of numbers with constraints
 
-  ## Ash Type Mapping
+  alias Ash.Resource.Info, as: ResourceInfo
 
   | Ash Type | PhoenixGenApi Type |
   |----------|-------------------|
@@ -26,8 +26,8 @@ defmodule AshPhoenixGenApi.TypeMapper do
   | `:float` / `Ash.Type.Float` | `:num` |
   | `:decimal` / `Ash.Type.Decimal` | `:num` |
   | `:boolean` / `Ash.Type.Boolean` | `:boolean` |
-  | `:uuid` / `Ash.Type.UUID` | `:string` |
-  | `:uuid_v7` / `Ash.Type.UUIDv7` | `:string` |
+  | `:uuid` / `Ash.Type.UUID` | `:uuid` |
+  | `:uuid_v7` / `Ash.Type.UUIDv7` | `:uuid` |
   | `:date` / `Ash.Type.Date` | `:string` |
   | `:time` / `Ash.Type.Time` | `:string` |
   | `:datetime` / `Ash.Type.DateTime` | `:datetime` |
@@ -77,7 +77,7 @@ defmodule AshPhoenixGenApi.TypeMapper do
       :num
 
       iex> AshPhoenixGenApi.TypeMapper.to_gen_api_type(:uuid)
-      :string
+      :uuid
 
       iex> AshPhoenixGenApi.TypeMapper.to_gen_api_type(:datetime)
       :datetime
@@ -113,13 +113,12 @@ defmodule AshPhoenixGenApi.TypeMapper do
           | {:list, pos_integer()}
           | {:list_string, pos_integer(), pos_integer()}
           | {:list_num, pos_integer()}
-  def to_gen_api_type(ash_type, constraints \\ [])
-
   # String types
+  def to_gen_api_type(type, constraints \\ [])
   def to_gen_api_type(:string, constraints) do
     case Keyword.get(constraints, :max_length) do
       nil -> :string
-      max_length when is_integer(max_length) and max_length > 0 -> {:string, max_length}
+      max_length when is_integer(max_length) and max_length >0 -> {:string, max_length}
       _ -> :string
     end
   end
@@ -145,10 +144,10 @@ defmodule AshPhoenixGenApi.TypeMapper do
   def to_gen_api_type(Ash.Type.Decimal, _constraints), do: :num
 
   # UUID types
-  def to_gen_api_type(:uuid, _constraints), do: :string
-  def to_gen_api_type(Ash.Type.UUID, _constraints), do: :string
-  def to_gen_api_type(:uuid_v7, _constraints), do: :string
-  def to_gen_api_type(Ash.Type.UUIDv7, _constraints), do: :string
+  def to_gen_api_type(:uuid, _constraints), do: :uuid
+  def to_gen_api_type(Ash.Type.UUID, _constraints), do: :uuid
+  def to_gen_api_type(:uuid_v7, _constraints), do: :uuid
+  def to_gen_api_type(Ash.Type.UUIDv7, _constraints), do: :uuid
 
   # Date/Time types - date, time, duration remain as :string
   def to_gen_api_type(:date, _constraints), do: :string
@@ -223,44 +222,7 @@ defmodule AshPhoenixGenApi.TypeMapper do
 
   # Array types - map to list types
   def to_gen_api_type({:array, inner_type}, constraints) do
-    max_items = Keyword.get(constraints, :max_items, @default_max_list_items)
-    inner_constraints = Keyword.get(constraints, :items, [])
-
-    case to_gen_api_type(inner_type, inner_constraints) do
-      :string ->
-        max_item_length =
-          Keyword.get(inner_constraints, :max_length, @default_max_string_item_length)
-
-        {:list_string, max_items, max_item_length}
-
-      {:string, _max_bytes} ->
-        max_item_length =
-          Keyword.get(inner_constraints, :max_length, @default_max_string_item_length)
-
-        {:list_string, max_items, max_item_length}
-
-      :num ->
-        {:list_num, max_items}
-
-      :map ->
-        {:list, max_items}
-
-      {:map, _max_items} ->
-        {:list, max_items}
-
-      :datetime ->
-        {:list, max_items}
-
-      :naive_datetime ->
-        {:list, max_items}
-
-      :boolean ->
-        {:list, max_items}
-
-      # Nested lists and other complex types use :list
-      _ ->
-        {:list, max_items}
-    end
+    map_array_type(inner_type, constraints)
   end
 
   # Ash.Type.Array module form
@@ -281,15 +243,13 @@ defmodule AshPhoenixGenApi.TypeMapper do
 
   # Catch-all: try to resolve the type module, otherwise default to :string
   def to_gen_api_type(ash_type, constraints) when is_atom(ash_type) do
-    cond do
-      function_exported?(ash_type, :type, 1) ->
-        # It's an Ash type module, try to get the underlying type
-        underlying = ash_type.type(constraints)
-        to_gen_api_type(underlying, constraints)
-
-      true ->
-        # Unknown type, default to string
-        :string
+    if function_exported?(ash_type, :type, 1) do
+      # It's an Ash type module, try to get the underlying type
+      underlying = ash_type.type(constraints)
+      to_gen_api_type(underlying, constraints)
+    else
+      # Unknown type, default to string
+      :string
     end
   end
 
@@ -439,7 +399,7 @@ defmodule AshPhoenixGenApi.TypeMapper do
             Ash.Resource.Info.attributes(resource)
             |> Enum.filter(& &1.public?)
 
-          %{accept: accept_list} when is_list(accept_list) ->
+          accept_list when is_list(accept_list) ->
             accept_list
             |> Enum.map(fn name -> Ash.Resource.Info.attribute(resource, name) end)
             |> Enum.filter(& &1)
@@ -494,4 +454,64 @@ defmodule AshPhoenixGenApi.TypeMapper do
 
     {arg_types, arg_orders}
   end
+
+
+  defp map_array_type(inner_type, constraints) do
+    max_items = Keyword.get(constraints, :max_items, @default_max_list_items)
+    inner_constraints = Keyword.get(constraints, :items, [])
+
+    inner_type
+    |> to_gen_api_type(inner_constraints)
+    |> map_to_list_type(max_items, inner_constraints)
+  end
+
+  defp map_to_list_type(:string, max_items, inner_constraints) do
+    max_item_length =
+      Keyword.get(inner_constraints, :max_length, @default_max_string_item_length)
+
+    {:list_string, max_items, max_item_length}
+  end
+
+  defp map_to_list_type(:uuid, max_items, inner_constraints) do
+    max_item_length =
+      Keyword.get(inner_constraints, :max_length, @default_max_string_item_length)
+
+    {:list_string, max_items, max_item_length}
+  end
+
+  defp map_to_list_type({:string, _max_bytes}, max_items, inner_constraints) do
+    max_item_length =
+      Keyword.get(inner_constraints, :max_length, @default_max_string_item_length)
+
+    {:list_string, max_items, max_item_length}
+  end
+
+  defp map_to_list_type(:num, max_items, _inner_constraints) do
+    {:list_num, max_items}
+  end
+
+  defp map_to_list_type(:map, max_items, _inner_constraints) do
+    {:list, max_items}
+  end
+
+  defp map_to_list_type({:map, _max_items}, max_items, _inner_constraints) do
+    {:list, max_items}
+  end
+
+  defp map_to_list_type(:datetime, max_items, _inner_constraints) do
+    {:list, max_items}
+  end
+
+  defp map_to_list_type(:naive_datetime, max_items, _inner_constraints) do
+    {:list, max_items}
+  end
+
+  defp map_to_list_type(:boolean, max_items, _inner_constraints) do
+    {:list, max_items}
+  end
+
+  defp map_to_list_type(_other, max_items, _inner_constraints) do
+    {:list, max_items}
+  end
+
 end

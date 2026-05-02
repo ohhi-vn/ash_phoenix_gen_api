@@ -43,12 +43,17 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyDomainConfig do
 
   use Spark.Dsl.Verifier
 
+  alias Spark.Dsl.Verifier, as: SparkVerifier
+  alias Spark.Error.DslError, as: SparkDslError
+  alias Ash.Domain.Info, as: DomainInfo
   alias AshPhoenixGenApi.Domain.Info
   alias AshPhoenixGenApi.Resource.Info, as: ResourceInfo
+  alias Ash.Resource.Info, as: ResourceAshInfo
+  alias AshPhoenixGenApi.Resource.ActionConfig, as: ActionConfig
 
   @impl true
   def verify(dsl_state) do
-    domain = Spark.Dsl.Verifier.get_persisted(dsl_state, :module)
+    domain = SparkVerifier.get_persisted(dsl_state, :module)
 
     # Check if gen_api is configured on this domain
     supporter_module = extract_opt(Info.gen_api_supporter_module(dsl_state), nil)
@@ -77,7 +82,7 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyDomainConfig do
   defp verify_supporter_module(domain, supporter_module) do
     cond do
       not is_atom(supporter_module) ->
-        raise Spark.Error.DslError,
+        raise SparkDslError,
           module: domain,
           path: [:gen_api, :supporter_module],
           message: """
@@ -91,7 +96,7 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyDomainConfig do
       # Check that the module name is a reasonable Elixir module name
       # (starts with uppercase letter when converted to string)
       not valid_module_name?(supporter_module) ->
-        raise Spark.Error.DslError,
+        raise SparkDslError,
           module: domain,
           path: [:gen_api, :supporter_module],
           message: """
@@ -137,95 +142,73 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyDomainConfig do
 
   defp verify_push_nodes(dsl_state, domain) do
     push_nodes = extract_opt(Info.gen_api_push_nodes(dsl_state), nil)
+    verify_push_nodes_value(push_nodes, domain)
+  end
 
-    case push_nodes do
-      nil ->
-        :ok
+  defp verify_push_nodes_value(nil, _domain), do: :ok
+  defp verify_push_nodes_value(:local, _domain), do: :ok
 
-      :local ->
-        :ok
+  defp verify_push_nodes_value(nodes, domain) when is_list(nodes) do
+    invalid_elements =
+      nodes
+      |> Enum.with_index()
+      |> Enum.filter(fn {elem, _idx} -> not is_atom(elem) end)
+      |> Enum.map(fn {elem, idx} ->
+        "  Element at index #{idx}: #{inspect(elem)} (expected an atom)"
+      end)
 
-      nodes when is_list(nodes) ->
-        invalid_elements =
-          nodes
-          |> Enum.with_index()
-          |> Enum.filter(fn {elem, _idx} -> not is_atom(elem) end)
-          |> Enum.map(fn {elem, idx} ->
-            "  Element at index #{idx}: #{inspect(elem)} (expected an atom)"
-          end)
+    if invalid_elements == [] do
+      :ok
+    else
+      raise SparkDslError,
+        module: domain,
+        path: [:gen_api, :push_nodes],
+        message: """
+        All elements in push_nodes list must be atoms (node names).
 
-        if invalid_elements == [] do
-          :ok
-        else
-          raise Spark.Error.DslError,
-            module: domain,
-            path: [:gen_api, :push_nodes],
-            message: """
-            All elements in push_nodes list must be atoms (node names).
+        Invalid elements:
+        #{Enum.join(invalid_elements, "\n")}
 
-            Invalid elements:
-            #{Enum.join(invalid_elements, "\n")}
-
-            Example: push_nodes [:"gateway1@host", :"gateway2@host"]
-            """
-        end
-
-      {mod, fun, args} when is_atom(mod) and is_atom(fun) and is_list(args) ->
-        :ok
-
-      {mod, fun, args} ->
-        errors = []
-
-        errors =
-          if not is_atom(mod) do
-            errors ++ ["  Module must be an atom, got: #{inspect(mod)}"]
-          else
-            errors
-          end
-
-        errors =
-          if not is_atom(fun) do
-            errors ++ ["  Function must be an atom, got: #{inspect(fun)}"]
-          else
-            errors
-          end
-
-        errors =
-          if not is_list(args) do
-            errors ++ ["  Args must be a list, got: #{inspect(args)}"]
-          else
-            errors
-          end
-
-        raise Spark.Error.DslError,
-          module: domain,
-          path: [:gen_api, :push_nodes],
-          message: """
-          Invalid MFA tuple for push_nodes.
-
-          Errors:
-          #{Enum.join(errors, "\n")}
-
-          Expected format: {Module, :function, [arg1, arg2, ...]}
-          Example: push_nodes {ClusterHelper, :get_gateway_nodes, []}
-          """
-
-      other ->
-        raise Spark.Error.DslError,
-          module: domain,
-          path: [:gen_api, :push_nodes],
-          message: """
-          Invalid push_nodes configuration.
-
-          Got: #{inspect(other)}
-
-          push_nodes must be one of:
-          - A list of node atoms: [:"gateway1@host", :"gateway2@host"]
-          - An MFA tuple: {ClusterHelper, :get_gateway_nodes, []}
-          - `:local` for the local node
-          - `nil` for no push nodes (default)
-          """
+        Example: push_nodes [:"gateway1@host", :"gateway2@host"]
+        """
     end
+  end
+
+  defp verify_push_nodes_value({mod, fun, args}, domain) do
+    if is_atom(mod) and is_atom(fun) and is_list(args) do
+      :ok
+    else
+      errors = build_mfa_error_parts(mod, fun, args)
+      raise SparkDslError,
+        module: domain,
+        path: [:gen_api, :push_nodes],
+        message: """
+        Invalid MFA tuple for push_nodes.
+
+        Errors:
+        #{Enum.join(errors, "\n")}
+
+        Expected format: {Module, :function, [arg1, arg2, ...]}
+        Example: push_nodes {ClusterHelper, :get_gateway_nodes, []}
+        """
+    end
+  end
+
+  defp verify_push_nodes_value(other, domain) do
+    raise SparkDslError,
+      module: domain,
+      path: [:gen_api, :push_nodes],
+      message: """
+      Invalid push_nodes configuration.
+
+      Got: #{inspect(other)}
+
+      push_nodes must be one of:
+      - A list of node atoms: [:"gateway1@host", :"gateway2@host"]
+      - An MFA tuple: {ClusterHelper, :get_gateway_nodes, []}
+      - `:local` for the local node
+      - `nil` for no push nodes (default)
+      """
   end
 
   # ---------------------------------------------------------------------------
@@ -234,65 +217,71 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyDomainConfig do
 
   defp verify_permission_callback(dsl_state, domain) do
     permission_callback = extract_opt(Info.gen_api_permission_callback(dsl_state), nil)
+    verify_permission_callback_value(permission_callback, domain)
+  end
 
-    case permission_callback do
-      nil ->
-        :ok
+  defp verify_permission_callback_value(nil, _domain), do: :ok
 
-      {mod, fun, args} when is_atom(mod) and is_atom(fun) and is_list(args) ->
-        :ok
+  defp verify_permission_callback_value({mod, fun, args}, domain) do
+    if is_atom(mod) and is_atom(fun) and is_list(args) do
+      :ok
+    else
+      errors = build_mfa_error_parts(mod, fun, args)
+      raise SparkDslError,
+        module: domain,
+        path: [:gen_api, :permission_callback],
+        message: """
+        Invalid MFA tuple for permission_callback.
 
-      {mod, fun, args} ->
-        errors = []
+        Errors:
+        #{Enum.join(errors, "\n")}
 
-        errors =
-          if not is_atom(mod) do
-            errors ++ ["  Module must be an atom, got: #{inspect(mod)}"]
-          else
-            errors
-          end
-
-        errors =
-          if not is_atom(fun) do
-            errors ++ ["  Function must be an atom, got: #{inspect(fun)}"]
-          else
-            errors
-          end
-
-        errors =
-          if not is_list(args) do
-            errors ++ ["  Args must be a list, got: #{inspect(args)}"]
-          else
-            errors
-          end
-
-        raise Spark.Error.DslError,
-          module: domain,
-          path: [:gen_api, :permission_callback],
-          message: """
-          Invalid MFA tuple for permission_callback.
-
-          Errors:
-          #{Enum.join(errors, "\n")}
-
-          Expected format: {Module, :function, [arg1, arg2, ...]}
-          Example: permission_callback {MyApp.Permissions, :check, []}
-          """
-
-      other ->
-        raise Spark.Error.DslError,
-          module: domain,
-          path: [:gen_api, :permission_callback],
-          message: """
-          Invalid permission_callback configuration.
-
-          Got: #{inspect(other)}
-
-          permission_callback must be one of:
-          - An MFA tuple: {Module, :function, []}
-          - `nil` for no callback (default)
-          """
+        Expected format: {Module, :function, [arg1, arg2, ...]}
+        Example: permission_callback {MyApp.Permissions, :check, []}
+        """
     end
+  end
+
+  defp verify_permission_callback_value(other, domain) do
+    raise SparkDslError,
+      module: domain,
+      path: [:gen_api, :permission_callback],
+      message: """
+      Invalid permission_callback configuration.
+
+      Got: #{inspect(other)}
+
+      permission_callback must be one of:
+      - An MFA tuple: {Module, :function, []}
+      - `nil` for no callback (default)
+      """
+  end
+
+  defp build_mfa_error_parts(mod, fun, args) do
+    errors = []
+
+    errors =
+      if not is_atom(mod) do
+        errors ++ ["  Module must be an atom, got: #{inspect(mod)}"]
+      else
+        errors
+      end
+
+    errors =
+      if not is_atom(fun) do
+        errors ++ ["  Function must be an atom, got: #{inspect(fun)}"]
+      else
+        errors
+      end
+
+    errors =
+      if not is_list(args) do
+        errors ++ ["  Args must be a list, got: #{inspect(args)}"]
+      else
+        errors
+      end
+
+    errors
   end
 
   # ---------------------------------------------------------------------------
@@ -322,9 +311,9 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyDomainConfig do
 
     resources_with_gen_api =
       domain
-      |> Ash.Domain.Info.resources()
+      |> DomainInfo.resources()
       |> Enum.filter(fn resource ->
-        extensions = Ash.Resource.Info.extensions(resource)
+        extensions = ResourceAshInfo.extensions(resource)
         Enum.any?(extensions, &(&1 == AshPhoenixGenApi.Resource))
       end)
 
@@ -349,7 +338,7 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyDomainConfig do
     if errors == [] do
       :ok
     else
-      raise Spark.Error.DslError,
+      raise SparkDslError,
         module: domain,
         path: [:gen_api],
         message: """
@@ -367,9 +356,9 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyDomainConfig do
   defp verify_request_type_uniqueness(_dsl_state, domain) do
     resources_with_gen_api =
       domain
-      |> Ash.Domain.Info.resources()
+      |> DomainInfo.resources()
       |> Enum.filter(fn resource ->
-        extensions = Ash.Resource.Info.extensions(resource)
+        extensions = ResourceAshInfo.extensions(resource)
         Enum.any?(extensions, &(&1 == AshPhoenixGenApi.Resource))
       end)
 
@@ -382,7 +371,7 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyDomainConfig do
         |> ResourceInfo.enabled_actions()
         |> Enum.map(fn action_config ->
           request_type =
-            AshPhoenixGenApi.Resource.ActionConfig.effective_request_type(action_config)
+            ActionConfig.effective_request_type(action_config)
 
           {request_type, resource, action_config.name}
         end)
@@ -408,7 +397,7 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyDomainConfig do
     if duplicates == [] do
       :ok
     else
-      raise Spark.Error.DslError,
+      raise SparkDslError,
         module: domain,
         path: [:gen_api],
         message: """

@@ -298,40 +298,54 @@ defmodule AshPhoenixGenApi.Resource.MfaVerifierTest do
     arg_orders = mfa_config.arg_orders
 
     cond do
-      is_map(arg_types) and map_size(arg_types) > 0 and
-          is_list(arg_orders) and arg_orders != [] ->
-        arg_type_keys = MapSet.new(Map.keys(arg_types))
-        arg_order_keys = MapSet.new(arg_orders)
+      has_both_arg_configs?(arg_types, arg_orders) ->
+        check_mfa_arg_keys_match(mfa_config)
 
-        missing_in_orders = MapSet.difference(arg_type_keys, arg_order_keys)
-        missing_in_types = MapSet.difference(arg_order_keys, arg_type_keys)
-
-        errors = []
-
-        errors =
-          if MapSet.size(missing_in_orders) > 0 do
-            ["MFA `#{mfa_config.name}`: arg_types has keys " <>
-               "#{inspect(MapSet.to_list(missing_in_orders))} that are missing from arg_orders" | errors]
-          else
-            errors
-          end
-
-        errors =
-          if MapSet.size(missing_in_types) > 0 do
-            ["MFA `#{mfa_config.name}`: arg_orders has keys " <>
-               "#{inspect(MapSet.to_list(missing_in_types))} that are missing from arg_types" | errors]
-          else
-            errors
-          end
-
-        errors
-
-      is_map(arg_types) and map_size(arg_types) > 0 ->
+      has_only_arg_types?(arg_types) ->
         []
 
       true ->
         []
     end
+  end
+
+  defp has_both_arg_configs?(arg_types, arg_orders) do
+    is_map(arg_types) and map_size(arg_types) > 0 and
+      is_list(arg_orders) and arg_orders != []
+  end
+
+  defp has_only_arg_types?(arg_types) do
+    is_map(arg_types) and map_size(arg_types) > 0
+  end
+
+  defp check_mfa_arg_keys_match(mfa_config) do
+    arg_types = mfa_config.arg_types
+    arg_orders = mfa_config.arg_orders
+    arg_type_keys = MapSet.new(Map.keys(arg_types))
+    arg_order_keys = MapSet.new(arg_orders)
+
+    missing_in_orders = MapSet.difference(arg_type_keys, arg_order_keys)
+    missing_in_types = MapSet.difference(arg_order_keys, arg_type_keys)
+
+    errors = []
+
+    errors =
+      if MapSet.size(missing_in_orders) > 0 do
+        ["MFA `#{mfa_config.name}`: arg_types has keys " <>
+           "#{inspect(MapSet.to_list(missing_in_orders))} that are missing from arg_orders" | errors]
+      else
+        errors
+      end
+
+    errors =
+      if MapSet.size(missing_in_types) > 0 do
+        ["MFA `#{mfa_config.name}`: arg_orders has keys " <>
+           "#{inspect(MapSet.to_list(missing_in_types))} that are missing from arg_types" | errors]
+      else
+        errors
+      end
+
+    errors
   end
 
   defp collect_mfa_permission_arg_errors(mfa_config) do

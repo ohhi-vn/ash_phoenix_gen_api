@@ -6,6 +6,10 @@ defmodule AshPhoenixGenApi.Codec do
   call is encoded before being returned to the caller. This module provides
   the encoding functions used by the auto-generated code interface functions.
 
+  The `result_encoder` determines how the result returned from an Ash action
+  call is encoded before being returned to the caller. This module provides
+  the encoding functions used by the auto-generated code interface functions.
+
   ## Encoder Modes
 
   - `:struct` — Return the Ash resource struct as-is (default, no encoding)
@@ -56,6 +60,8 @@ defmodule AshPhoenixGenApi.Codec do
       AshPhoenixGenApi.Codec.encode_value(record, {MyEncoder, :to_json, []})
       #=> MyEncoder.to_json(record)
   """
+
+  alias Ash.Resource.Info, as: ResourceInfo
 
   @type result_encoder ::
           :struct
@@ -183,7 +189,7 @@ defmodule AshPhoenixGenApi.Codec do
     if ash_resource?(resource) do
       public_field_names =
         resource
-        |> Ash.Resource.Info.public_fields()
+        |> ResourceInfo.public_fields()
         |> Enum.map(& &1.name)
         |> MapSet.new()
 

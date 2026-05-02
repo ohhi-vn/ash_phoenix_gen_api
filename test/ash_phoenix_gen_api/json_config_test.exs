@@ -562,7 +562,7 @@ defmodule AshPhoenixGenApi.JsonConfigTest do
         )
 
       args = result["send_direct_message"]["data"]["args"]
-      assert args["from_user_id"] == "example_string"
+      assert args["from_user_id"] == "example"
       assert args["priority"] == 42
       assert args["tags"] == ["example"]
     end
@@ -870,6 +870,7 @@ defmodule AshPhoenixGenApi.JsonConfigTest do
   end
 
   defp example_from_type(:string), do: "example_string"
+  defp example_from_type(:uuid), do: "example"
   defp example_from_type(:num), do: 42
   defp example_from_type({:list_string, _, _}), do: ["example"]
   defp example_from_type({:list_num, _}), do: [1, 2, 3]
