@@ -872,7 +872,13 @@ defmodule AshPhoenixGenApi.JsonConfigTest do
   defp example_from_type(:string), do: "example_string"
   defp example_from_type(:uuid), do: "example"
   defp example_from_type(:num), do: 42
+  defp example_from_type(:list_string), do: ["example"]
   defp example_from_type({:list_string, _, _}), do: ["example"]
+  defp example_from_type(:list_num), do: [1, 2, 3]
   defp example_from_type({:list_num, _}), do: [1, 2, 3]
+  defp example_from_type(type) when is_list(type) do
+    # Extended format: [type: ..., allow_nil?: ..., default_value: ...]
+    Keyword.get(type, :type, type) |> example_from_type()
+  end
   defp example_from_type(_), do: "example"
 end

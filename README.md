@@ -26,9 +26,9 @@ Add `ash_phoenix_gen_api` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:ash_phoenix_gen_api, "~> 0.1.0"},
+    {:ash_phoenix_gen_api, "~> 1.0.0"},
     {:ash, "~> 3.5"},
-    {:phoenix_gen_api, "~> 2.11"}
+    {:phoenix_gen_api, "~> 2.14"}
   ]
 end
 ```
@@ -307,8 +307,8 @@ Ash types are automatically mapped to PhoenixGenApi argument types:
 | `:integer`, `Ash.Type.Integer` | `:num` |
 | `:float`, `Ash.Type.Float` | `:num` |
 | `:decimal`, `Ash.Type.Decimal` | `:num` |
-| `:uuid`, `Ash.Type.UUID` | `:string` |
-| `:uuid_v7`, `Ash.Type.UUIDv7` | `:string` |
+| `:uuid`, `Ash.Type.UUID` | `:uuid` |
+| `:uuid_v7`, `Ash.Type.UUIDv7` | `:uuid` |
 | `:boolean`, `Ash.Type.Boolean` | `:boolean` |
 | `:date`, `Ash.Type.Date` | `:string` |
 | `:time`, `Ash.Type.Time` | `:string` |
@@ -330,6 +330,30 @@ Ash types are automatically mapped to PhoenixGenApi argument types:
 | `{:array, :float}` | `{:list_num, 1000}` |
 | `{:array, :map}` | `{:list, 1000}` |
 | `{:array, :boolean}` | `{:list, 1000}` |
+
+### Nil Attribute Support
+
+When an Ash attribute or argument has `allow_nil? true`, the generated `arg_types` uses an **extended format** that includes the `:allow_nil?` option:
+
+```elixir
+# For attributes with allow_nil? false (default)
+"content" => :string
+
+# For attributes with allow_nil? true
+"content" => [type: :string, allow_nil?: true]
+
+# With constraints and allow_nil? true
+"description" => [type: {:string, 255}, max_bytes: 255, allow_nil?: true]
+"tags" => [type: :list_string, max_items: 1000, max_item_bytes: 50, allow_nil?: true]
+```
+
+The extended format is a keyword list with:
+- `:type` - The PhoenixGenApi type (atom or tuple)
+- `:allow_nil?` - Always `true` when present
+- Type-specific constraints (e.g., `:max_bytes`, `:max_items`, `:max_item_bytes`)
+- `:default_value` - Present when the Ash attribute has a default value
+
+This allows PhoenixGenApi clients to properly handle optional fields and validate input accordingly.
 
 See `AshPhoenixGenApi.TypeMapper` for the complete mapping and customization options.
 
@@ -359,7 +383,9 @@ When `arg_types` and `arg_orders` are not explicitly set, the extension automati
 - **For `:create` and `:update` actions**: Includes accepted attributes and action arguments
 - **For `:read`, `:destroy`, and `:action` types**: Includes only action arguments
 
-Example — given this Ash action:
+### Basic Example
+
+Given this Ash action:
 
 ```elixir
 actions do
@@ -382,6 +408,63 @@ arg_types: %{
   "file_id" => :string             # UUID → :string
 },
 arg_orders: ["from_user_id", "to_user_id", "content", "sent_at", "metadata", "reply_to_id", "file_id"]
+```
+
+### Nil Attribute Example
+
+When attributes have `allow_nil? true`, the extended format is used:
+
+```elixir
+attributes do
+  attribute :content, :string do
+    allow_nil? true
+  end
+  attribute :reply_to_id, :uuid do
+    allow_nil? true
+  end
+  attribute :tags, {:array, :string} do
+    allow_nil? true
+    constraints [max_length: 10]
+  end
+end
+
+actions do
+  create :create do
+    accept [:content, :reply_to_id, :tags]
+  end
+end
+```
+
+The auto-derived `arg_types` would be:
+
+```elixir
+arg_types: %{
+  "content" => [type: :string, allow_nil?: true],
+  "reply_to_id" => [type: :uuid, allow_nil?: true],
+  "tags" => [type: :list_string, max_items: 1000, max_item_bytes: 50, allow_nil?: true]
+},
+arg_orders: ["content", "reply_to_id", "tags"]
+```
+
+### Default Values with Nil Attributes
+
+When an attribute has both `allow_nil? true` and a default value:
+
+```elixir
+attributes do
+  attribute :priority, :integer do
+    allow_nil? true
+    default 0
+  end
+end
+```
+
+The auto-derived type includes the default value:
+
+```elixir
+arg_types: %{
+  "priority" => [type: :num, allow_nil?: true, default_value: 0]
+}
 ```
 
 ## Generated Supporter Module

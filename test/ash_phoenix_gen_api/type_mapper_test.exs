@@ -20,12 +20,14 @@ defmodule AshPhoenixGenApi.TypeMapperTest do
       assert TypeMapper.to_gen_api_type(Ash.Type.CiString) == :string
     end
 
-    test "maps :string with max_length constraint to {:string, max_bytes}" do
-      assert TypeMapper.to_gen_api_type(:string, max_length: 255) == {:string, 255}
+    test "string types maps :string with max_length constraint to [type: :string, max_bytes: 255]" do
+      assert TypeMapper.to_gen_api_type(:string, max_length: 255) ==
+               [type: :string, max_bytes: 255]
     end
 
-    test "maps Ash.Type.String with max_length constraint to {:string, max_bytes}" do
-      assert TypeMapper.to_gen_api_type(Ash.Type.String, max_length: 100) == {:string, 100}
+    test "string types maps Ash.Type.String with max_length constraint to [type: :string, max_bytes: 100]" do
+      assert TypeMapper.to_gen_api_type(Ash.Type.String, max_length: 100) ==
+               [type: :string, max_bytes: 100]
     end
   end
 
@@ -152,8 +154,9 @@ defmodule AshPhoenixGenApi.TypeMapperTest do
       assert TypeMapper.to_gen_api_type(:map) == :map
     end
 
-    test "maps :map with max_items constraint to {:map, max_items}" do
-      assert TypeMapper.to_gen_api_type(:map, max_items: 50) == {:map, 50}
+    test "maps :map with max_items constraint to [type: :map, max_items: 50]" do
+      assert TypeMapper.to_gen_api_type(:map, max_items: 50) ==
+               [type: :map, max_items: 50]
     end
 
     test "maps Ash.Type.Map to :map" do
@@ -202,61 +205,61 @@ defmodule AshPhoenixGenApi.TypeMapperTest do
   end
 
   describe "to_gen_api_type/1 - array types" do
-    test "maps {:array, :string} to {:list_string, max_items, max_item_length}" do
+    test "maps {:array, :string} to [type: :list_string, max_items: 1000, max_item_bytes: 50]" do
       assert TypeMapper.to_gen_api_type({:array, :string}) ==
-               {:list_string, 1000, 50}
+               [type: :list_string, max_items: 1000, max_item_bytes: 50]
     end
 
-    test "maps {:array, :integer} to {:list_num, max_items}" do
+    test "maps {:array, :integer} to [type: :list_num, max_items: 1000]" do
       assert TypeMapper.to_gen_api_type({:array, :integer}) ==
-               {:list_num, 1000}
+               [type: :list_num, max_items: 1000]
     end
 
-    test "maps {:array, :uuid} to {:list_string, max_items, max_item_length}" do
+    test "maps {:array, :uuid} to [type: :list_string, max_items: 1000, max_item_bytes: 50]" do
       assert TypeMapper.to_gen_api_type({:array, :uuid}) ==
-               {:list_string, 1000, 50}
+               [type: :list_string, max_items: 1000, max_item_bytes: 50]
     end
 
-    test "maps {:array, :float} to {:list_num, max_items}" do
+    test "maps {:array, :float} to [type: :list_num, max_items: 1000]" do
       assert TypeMapper.to_gen_api_type({:array, :float}) ==
-               {:list_num, 1000}
+               [type: :list_num, max_items: 1000]
     end
 
-    test "maps {:array, :boolean} to {:list, max_items}" do
-      # boolean maps to :boolean, so array of boolean maps to {:list, max_items}
+    test "maps {:array, :boolean} to [type: :list, max_items: 1000]" do
+      # boolean maps to :boolean, so array of boolean maps to [type: :list, max_items: ...]
       assert TypeMapper.to_gen_api_type({:array, :boolean}) ==
-               {:list, 1000}
+               [type: :list, max_items: 1000]
     end
 
-    test "maps {:array, :map} to {:list, max_items}" do
-      # map maps to :map, so array of map maps to {:list, max_items}
+    test "maps {:array, :map} to [type: :list, max_items: 1000]" do
+      # map maps to :map, so array of map maps to [type: :list, max_items: ...]
       assert TypeMapper.to_gen_api_type({:array, :map}) ==
-               {:list, 1000}
+               [type: :list, max_items: 1000]
     end
 
-    test "maps {:array, :datetime} to {:list, max_items}" do
+    test "maps {:array, :datetime} to [type: :list, max_items: 1000]" do
       assert TypeMapper.to_gen_api_type({:array, :datetime}) ==
-               {:list, 1000}
+               [type: :list, max_items: 1000]
     end
 
-    test "maps {:array, :naive_datetime} to {:list, max_items}" do
+    test "maps {:array, :naive_datetime} to [type: :list, max_items: 1000]" do
       assert TypeMapper.to_gen_api_type({:array, :naive_datetime}) ==
-               {:list, 1000}
+               [type: :list, max_items: 1000]
     end
 
     test "respects max_items constraint" do
       assert TypeMapper.to_gen_api_type({:array, :string}, max_items: 500) ==
-               {:list_string, 500, 50}
+               [type: :list_string, max_items: 500, max_item_bytes: 50]
     end
 
     test "respects max_item_length constraint for string arrays" do
       assert TypeMapper.to_gen_api_type({:array, :string}, items: [max_length: 100]) ==
-               {:list_string, 1000, 100}
+               [type: :list_string, max_items: 1000, max_item_bytes: 100]
     end
 
     test "respects max_items constraint for list type" do
       assert TypeMapper.to_gen_api_type({:array, :map}, max_items: 200) ==
-               {:list, 200}
+               [type: :list, max_items: 200]
     end
   end
 

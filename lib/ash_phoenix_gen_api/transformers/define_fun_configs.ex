@@ -447,13 +447,15 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
       attr_fields =
         Enum.map(accepted_attrs, fn attr ->
           gen_api_type = TypeMapper.to_gen_api_type(attr.type, attr.constraints)
-          {attr.name, gen_api_type, attr.allow_nil?}
+          default_val = TypeMapper.get_ash_default_value(attr)
+          {attr.name, gen_api_type, attr.allow_nil?, default_val}
         end)
 
       arg_fields =
         Enum.map(arguments, fn arg ->
           gen_api_type = TypeMapper.to_gen_api_type(arg.type, arg.constraints)
-          {arg.name, gen_api_type, arg.allow_nil?}
+          default_val = TypeMapper.get_ash_default_value(arg)
+          {arg.name, gen_api_type, arg.allow_nil?, default_val}
         end)
 
       attr_fields ++ arg_fields

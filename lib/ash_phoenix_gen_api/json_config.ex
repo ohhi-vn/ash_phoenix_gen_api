@@ -394,19 +394,33 @@ defmodule AshPhoenixGenApi.JsonConfig do
       iex> AshPhoenixGenApi.JsonConfig.default_value_for_type({:list, 100})
       []
   """
-  @spec default_value_for_type(atom() | tuple()) :: term()
+  @spec default_value_for_type(atom() | tuple() | keyword()) :: term()
   def default_value_for_type(:string), do: ""
   def default_value_for_type({:string, _}), do: ""
   def default_value_for_type(:num), do: 0
   def default_value_for_type(:boolean), do: false
   def default_value_for_type(:datetime), do: ""
   def default_value_for_type(:naive_datetime), do: ""
+  def default_value_for_type(:uuid), do: ""
   def default_value_for_type(:map), do: %{}
   def default_value_for_type({:map, _}), do: %{}
   def default_value_for_type(:list), do: []
   def default_value_for_type({:list, _}), do: []
+  def default_value_for_type(:list_string), do: []
   def default_value_for_type({:list_string, _, _}), do: []
+  def default_value_for_type(:list_num), do: []
   def default_value_for_type({:list_num, _}), do: []
+  def default_value_for_type(type) when is_list(type) do
+    # Extended format: [type: ..., allow_nil?: ..., default_value: ...]
+    # Priority: explicit default_value > type-based default
+    case Keyword.get(type, :default_value) do
+      nil ->
+        # Get the underlying type and return its default
+        underlying_type = Keyword.get(type, :type, :string)
+        default_value_for_type(underlying_type)
+      default_val -> default_val
+    end
+  end
   def default_value_for_type(_), do: ""
 
   # ---------------------------------------------------------------------------

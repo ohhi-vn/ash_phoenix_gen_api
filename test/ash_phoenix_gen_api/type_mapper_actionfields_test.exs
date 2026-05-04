@@ -6,17 +6,17 @@ defmodule AshPhoenixGenApi.TypeMapper.ActionFieldsTest do
   describe "build_arg_config/1" do
     test "builds arg_types map and arg_orders list from fields" do
       fields = [
-        {:user_id, :string, false},
-        {:count, :num, true},
-        {:tags, {:list_string, 100, 20}, true}
+        {:user_id, :string, false, nil},
+        {:count, :num, true, 0},
+        {:tags, {:list_string, 100, 20}, true, []}
       ]
 
       {arg_types, arg_orders} = TypeMapper.build_arg_config(fields)
 
       assert arg_types == %{
                "user_id" => :string,
-               "count" => :num,
-               "tags" => {:list_string, 100, 20}
+               "count" => [allow_nil?: true, default_value: 0, type: :num],
+               "tags" => [allow_nil?: true, default_value: [], type: :list_string, max_items: 100, max_item_bytes: 20]
              }
 
       assert arg_orders == ["user_id", "count", "tags"]

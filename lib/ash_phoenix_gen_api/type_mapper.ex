@@ -118,7 +118,7 @@ defmodule AshPhoenixGenApi.TypeMapper do
   def to_gen_api_type(:string, constraints) do
     case Keyword.get(constraints, :max_length) do
       nil -> :string
-      max_length when is_integer(max_length) and max_length >0 -> {:string, max_length}
+      max_length when is_integer(max_length) and max_length >0 -> [type: :string, max_bytes: max_length]
       _ -> :string
     end
   end
@@ -128,7 +128,7 @@ defmodule AshPhoenixGenApi.TypeMapper do
   def to_gen_api_type(:ci_string, constraints) do
     case Keyword.get(constraints, :max_length) do
       nil -> :string
-      max_length when is_integer(max_length) and max_length > 0 -> {:string, max_length}
+      max_length when is_integer(max_length) and max_length >0 -> [type: :string, max_bytes: max_length]
       _ -> :string
     end
   end
@@ -187,7 +187,7 @@ defmodule AshPhoenixGenApi.TypeMapper do
   def to_gen_api_type(:map, constraints) do
     case Keyword.get(constraints, :max_items) do
       nil -> :map
-      max_items when is_integer(max_items) and max_items > 0 -> {:map, max_items}
+      max_items when is_integer(max_items) and max_items >0 -> [type: :map, max_items: max_items]
       _ -> :map
     end
   end
@@ -415,13 +415,15 @@ defmodule AshPhoenixGenApi.TypeMapper do
       attr_fields =
         Enum.map(accepted_attrs, fn attr ->
           gen_api_type = to_gen_api_type(attr.type, attr.constraints)
-          {attr.name, gen_api_type, attr.allow_nil?}
+          default_val = get_ash_default_value(attr)
+          {attr.name, gen_api_type, attr.allow_nil?, default_val}
         end)
 
       arg_fields =
         Enum.map(arguments, fn arg ->
           gen_api_type = to_gen_api_type(arg.type, arg.constraints)
-          {arg.name, gen_api_type, arg.allow_nil?}
+          default_val = get_ash_default_value(arg)
+          {arg.name, gen_api_type, arg.allow_nil?, default_val}
         end)
 
       attr_fields ++ arg_fields
@@ -441,18 +443,133 @@ defmodule AshPhoenixGenApi.TypeMapper do
   - `arg_types` is a map of `field_name_string => gen_api_type`
   - `arg_orders` is a list of field name strings in order
   """
-  @spec build_arg_config([{atom(), atom() | tuple(), boolean()}]) :: {map(), [String.t()]}
+  @spec build_arg_config([{atom(), atom() | tuple(), boolean()} | {atom(), atom() | tuple(), boolean(), any()}]) :: {map(), [String.t()]}
   def build_arg_config(fields) do
     arg_orders =
       fields
-      |> Enum.map(fn {name, _type, _allow_nil?} -> Atom.to_string(name) end)
+      |> Enum.map(fn {name, _type, _allow_nil?, _default_val} -> Atom.to_string(name) end)
 
     arg_types =
       fields
-      |> Enum.map(fn {name, type, _allow_nil?} -> {Atom.to_string(name), type} end)
+      |> Enum.map(fn field ->
+        {name, type, allow_nil?, default_val} = extract_field_info(field)
+        arg_config = build_type_config(type, allow_nil?, default_val)
+        {Atom.to_string(name), arg_config}
+      end)
       |> Map.new()
 
     {arg_types, arg_orders}
+  end
+
+  defp extract_field_info({name, type, allow_nil?}), do: {name, type, allow_nil?, nil}
+  defp extract_field_info({name, type, allow_nil?, default_val}), do: {name, type, allow_nil?, default_val}
+
+  @doc """
+  Gets the default value from an Ash attribute or argument.
+
+  Returns the default value if set, or `nil` if not set.
+  """
+  def get_ash_default_value(%{default: default}) when not is_function(default) do
+    default
+  end
+  def get_ash_default_value(%{default: default}) when is_function(default) do
+    # For functions, we can't call them here (compile-time), so return nil
+    nil
+  end
+  def get_ash_default_value(_), do: nil
+
+  @doc """
+  Builds the type configuration for a field.
+
+  Returns either:
+  - A simple type atom (backward compatible) when `allow_nil?` is false
+  - A keyword list with `:type` and `:allow_nil?` options (extended format) when `allow_nil?` is true
+
+  ## Examples
+
+      iex> AshPhoenixGenApi.TypeMapper.build_type_config(:string, false)
+      :string
+
+      iex> AshPhoenixGenApi.TypeMapper.build_type_config(:string, true)
+      [type: :string, allow_nil?: true]
+
+      iex> AshPhoenixGenApi.TypeMapper.build_type_config({:string, 255}, true)
+      [type: {:string, 255}, allow_nil?: true]
+  """
+  @spec build_type_config(atom() | tuple(), boolean(), any()) :: atom() | tuple() | keyword()
+  def build_type_config(type, false, _default_val), do: type
+  def build_type_config(type, true, nil) do
+    # Build keyword with type first, then params, then allow_nil? at the end
+    base = [type: type]
+    # Add type-specific params
+    keyword =
+      case type do
+        {:string, max_bytes} ->
+          Keyword.merge(base, [max_bytes: max_bytes])
+        {:map, max_items} ->
+          Keyword.merge(base, [max_items: max_items])
+        {:list_string, max_items, max_item_bytes} ->
+          base
+          |> Keyword.merge([max_items: max_items, max_item_bytes: max_item_bytes])
+          |> Keyword.put(:type, :list_string)
+        {:list_num, max_items} ->
+          Keyword.merge(base, [max_items: max_items, type: :list_num])
+        {:list, max_items} ->
+          Keyword.merge(base, [max_items: max_items, type: :list])
+        _ ->
+          base
+      end
+    Keyword.put(keyword, :allow_nil?, true)
+  end
+  def build_type_config(type, true, default_val) do
+    # Build keyword with type first, then params, then default_value, then allow_nil? at the end
+    base = [type: type]
+    # Add type-specific params
+    keyword =
+      case type do
+        {:string, max_bytes} ->
+          Keyword.merge(base, [max_bytes: max_bytes])
+        {:map, max_items} ->
+          Keyword.merge(base, [max_items: max_items])
+        {:list_string, max_items, max_item_bytes} ->
+          base
+          |> Keyword.merge([max_items: max_items, max_item_bytes: max_item_bytes])
+          |> Keyword.put(:type, :list_string)
+        {:list_num, max_items} ->
+          Keyword.merge(base, [max_items: max_items, type: :list_num])
+        {:list, max_items} ->
+          Keyword.merge(base, [max_items: max_items, type: :list])
+        _ ->
+          base
+      end
+    keyword
+    |> Keyword.put(:default_value, default_val)
+    |> Keyword.put(:allow_nil?, true)
+  end
+
+  @doc """
+  Wraps a type with nil support.
+
+  In PhoenixGenApi, to indicate that an argument can accept nil values,
+  wrap the type in a `{:nil, type}` tuple.
+
+  ## Examples
+
+      iex> AshPhoenixGenApi.TypeMapper.wrap_nil_type(:string)
+      {:nil, :string}
+
+      iex> AshPhoenixGenApi.TypeMapper.wrap_nil_type({:string, 255})
+      {:nil, {:string, 255}}
+
+      iex> AshPhoenixGenApi.TypeMapper.wrap_nil_type(:num)
+      {:nil, :num}
+  """
+  @spec wrap_nil_type(atom() | tuple()) :: {:nil, atom() | tuple()}
+  def wrap_nil_type(type) when is_atom(type) do
+    {:nil, type}
+  end
+  def wrap_nil_type(type) when is_tuple(type) do
+    {:nil, type}
   end
 
 
@@ -460,58 +577,65 @@ defmodule AshPhoenixGenApi.TypeMapper do
     max_items = Keyword.get(constraints, :max_items, @default_max_list_items)
     inner_constraints = Keyword.get(constraints, :items, [])
 
+    # Call to_gen_api_type/2 with inner_type and inner_constraints
     inner_type
     |> to_gen_api_type(inner_constraints)
     |> map_to_list_type(max_items, inner_constraints)
+  end
+
+  defp map_to_list_type(type, max_items, inner_constraints) when is_list(type) do
+    # type is a keyword list like [type: :string, max_bytes: 50]
+    actual_type = Keyword.get(type, :type, :string)
+    map_to_list_type(actual_type, max_items, inner_constraints)
   end
 
   defp map_to_list_type(:string, max_items, inner_constraints) do
     max_item_length =
       Keyword.get(inner_constraints, :max_length, @default_max_string_item_length)
 
-    {:list_string, max_items, max_item_length}
+    [type: :list_string, max_items: max_items, max_item_bytes: max_item_length]
   end
 
   defp map_to_list_type(:uuid, max_items, inner_constraints) do
     max_item_length =
       Keyword.get(inner_constraints, :max_length, @default_max_string_item_length)
 
-    {:list_string, max_items, max_item_length}
+    [type: :list_string, max_items: max_items, max_item_bytes: max_item_length]
   end
 
   defp map_to_list_type({:string, _max_bytes}, max_items, inner_constraints) do
     max_item_length =
       Keyword.get(inner_constraints, :max_length, @default_max_string_item_length)
 
-    {:list_string, max_items, max_item_length}
+    [type: :list_string, max_items: max_items, max_item_bytes: max_item_length]
   end
 
   defp map_to_list_type(:num, max_items, _inner_constraints) do
-    {:list_num, max_items}
+    [type: :list_num, max_items: max_items]
   end
 
   defp map_to_list_type(:map, max_items, _inner_constraints) do
-    {:list, max_items}
+    [type: :list, max_items: max_items]
   end
 
   defp map_to_list_type({:map, _max_items}, max_items, _inner_constraints) do
-    {:list, max_items}
+    [type: :list, max_items: max_items]
   end
 
   defp map_to_list_type(:datetime, max_items, _inner_constraints) do
-    {:list, max_items}
+    [type: :list, max_items: max_items]
   end
 
   defp map_to_list_type(:naive_datetime, max_items, _inner_constraints) do
-    {:list, max_items}
+    [type: :list, max_items: max_items]
   end
 
   defp map_to_list_type(:boolean, max_items, _inner_constraints) do
-    {:list, max_items}
+    [type: :list, max_items: max_items]
   end
 
   defp map_to_list_type(_other, max_items, _inner_constraints) do
-    {:list, max_items}
+    [type: :list, max_items: max_items]
   end
 
 end

@@ -235,21 +235,36 @@ defmodule AshPhoenixGenApi.Resource do
         Explicit argument types map. When provided, overrides the auto-derived
         arg_types from the Ash action's attributes and arguments.
 
-        Keys are argument name strings, values are PhoenixGenApi type atoms/tuples:
-        - `:string` - String values
-        - `{:string, max_bytes}` - String with custom max byte size
-        - `:num` - Numeric values
-        - `:boolean` - Boolean values
-        - `:datetime` - ISO 8601 datetime string, auto-converted to DateTime
-        - `:naive_datetime` - ISO 8601 datetime string, auto-converted to NaiveDateTime
-        - `:map` - Generic map
-        - `{:map, max_items}` - Map with max items constraint
-        - `:list` - Generic list
-        - `{:list, max_items}` - List with max items constraint
-        - `{:list_string, max_items, max_item_length}` - List of strings
-        - `{:list_num, max_items}` - List of numbers
+        **Simple Format (Backward Compatible)** - Uses just the type atom:
 
-        Example: `%{"user_id" => :string, "count" => :num, "tags" => {:list_string, 1000, 50}, "metadata" => :map, "sent_at" => :datetime}`
+        ```elixir
+        arg_types: %{"user_id" => :string, "age" => :num}
+        ```
+
+        **Extended Format (New)** - Uses a keyword list with `:type` and optional parameters:
+
+        ```elixir
+        arg_types: %{
+          "user_id" => [type: :string, max_bytes: 255, allow_nil?: true],
+          "age" => [type: :num, default_value: 18],
+          "tags" => [type: :list_string, max_items: 10, max_item_bytes: 100]
+        }
+        ```
+
+        Extended Format Options:
+
+        - `type:` - Required. The argument type (`:string`, `:num`, `:boolean`, etc.)
+        - `allow_nil?:` - Optional. When `true`, allows nil values (default: `false`)
+        - `default_value:` - Optional. Default value if argument is missing from request
+        - `max_bytes:` - For `:string` type, max byte size
+        - `max_items:` - For list/map types, max number of items
+        - `max_item_bytes:` - For `:list_string`, max bytes per item
+
+        **Nil Attribute Support**: When an Ash attribute has `allow_nil? true`, the auto-derived
+        `arg_types` will use the extended format with `allow_nil?: true`. This allows
+        PhoenixGenApi clients to properly handle optional fields.
+
+        Example: `%{"user_id" => :string, "count" => :num, "tags" => {:list_string, 1000, 50}}`
         """
       ],
       arg_orders: [
