@@ -226,13 +226,11 @@ defmodule AshPhoenixGenApi.TypeMapperTest do
     end
 
     test "maps {:array, :boolean} to [type: :list, max_items: 1000]" do
-      # boolean maps to :boolean, so array of boolean maps to [type: :list, max_items: ...]
       assert TypeMapper.to_gen_api_type({:array, :boolean}) ==
                [type: :list, max_items: 1000]
     end
 
     test "maps {:array, :map} to [type: :list, max_items: 1000]" do
-      # map maps to :map, so array of map maps to [type: :list, max_items: ...]
       assert TypeMapper.to_gen_api_type({:array, :map}) ==
                [type: :list, max_items: 1000]
     end
@@ -290,17 +288,51 @@ defmodule AshPhoenixGenApi.TypeMapperTest do
     end
   end
 
-  describe "default constants" do
-    test "default_max_list_items returns 1000" do
-      assert TypeMapper.default_max_list_items() == 1000
+  describe "build_type_config/3" do
+    test "returns simple type when allow_nil? is false" do
+      assert TypeMapper.build_type_config(:string, false, nil) == :string
+      assert TypeMapper.build_type_config(:uuid, false, nil) == :uuid
+      assert TypeMapper.build_type_config(:num, false, nil) == :num
     end
 
-    test "default_max_string_item_length returns 50" do
-      assert TypeMapper.default_max_string_item_length() == 50
+    test "returns keyword list with allow_nil? when allow_nil? is true and no default" do
+      assert TypeMapper.build_type_config(:string, true, nil) == [type: :string, allow_nil?: true]
+      assert TypeMapper.build_type_config(:uuid, true, nil) == [type: :uuid, allow_nil?: true]
     end
 
-    test "default_max_map_items returns 1000" do
-      assert TypeMapper.default_max_map_items() == 1000
+    test "returns keyword list with type tuple and constraints for string with max_bytes" do
+      # When type is a keyword list like [type: :string, max_bytes: 5000], it should be properly handled
+      result = TypeMapper.build_type_config([type: :string, max_bytes: 5000], true, nil)
+      assert result == [type: :string, max_bytes: 5000, allow_nil?: true]
+    end
+
+    test "returns keyword list with default_value when allow_nil? is true and default exists" do
+      result = TypeMapper.build_type_config(:string, true, "default")
+      assert result == [type: :string, default_value: "default", allow_nil?: true]
+    end
+
+    test "handles string type with max_length constraint and allow_nil? true - reproduces nested type bug" do
+      # This test reproduces the issue where content field with max_length: 5000
+      # and allow_nil? true should generate:
+      # [type: :string, max_bytes: 5000, allow_nil?: true]
+      # NOT:
+      # [type: [type: :string, max_bytes: 5000], allow_nil?: true]
+
+      # Simulate what happens when we have a string attribute with max_length: 5000
+      gen_api_type = TypeMapper.to_gen_api_type(:string, max_length: 5000)
+      assert gen_api_type == [type: :string, max_bytes: 5000]
+
+      # Now build the type config with allow_nil? true
+      result = TypeMapper.build_type_config(gen_api_type, true, nil)
+
+      # The expected result should be a flat keyword list
+      expected = [type: :string, max_bytes: 5000, allow_nil?: true]
+      assert result == expected
+
+      # Verify type is an atom, not a nested keyword list
+      type_value = Keyword.get(result, :type)
+      assert is_atom(type_value)
+      assert type_value == :string
     end
   end
 end

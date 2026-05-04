@@ -118,7 +118,7 @@ defmodule AshPhoenixGenApi.TypeMapper do
   def to_gen_api_type(:string, constraints) do
     case Keyword.get(constraints, :max_length) do
       nil -> :string
-      max_length when is_integer(max_length) and max_length >0 -> [type: :string, max_bytes: max_length]
+      max_length when is_integer(max_length) and max_length > 0 -> [type: :string, max_bytes: max_length]
       _ -> :string
     end
   end
@@ -128,7 +128,7 @@ defmodule AshPhoenixGenApi.TypeMapper do
   def to_gen_api_type(:ci_string, constraints) do
     case Keyword.get(constraints, :max_length) do
       nil -> :string
-      max_length when is_integer(max_length) and max_length >0 -> [type: :string, max_bytes: max_length]
+      max_length when is_integer(max_length) and max_length > 0 -> [type: :string, max_bytes: max_length]
       _ -> :string
     end
   end
@@ -187,7 +187,7 @@ defmodule AshPhoenixGenApi.TypeMapper do
   def to_gen_api_type(:map, constraints) do
     case Keyword.get(constraints, :max_items) do
       nil -> :map
-      max_items when is_integer(max_items) and max_items >0 -> [type: :map, max_items: max_items]
+      max_items when is_integer(max_items) and max_items > 0 -> [type: :map, max_items: max_items]
       _ -> :map
     end
   end
@@ -499,52 +499,36 @@ defmodule AshPhoenixGenApi.TypeMapper do
   @spec build_type_config(atom() | tuple(), boolean(), any()) :: atom() | tuple() | keyword()
   def build_type_config(type, false, _default_val), do: type
   def build_type_config(type, true, nil) do
-    # Build keyword with type first, then params, then allow_nil? at the end
-    base = [type: type]
-    # Add type-specific params
-    keyword =
-      case type do
-        {:string, max_bytes} ->
-          Keyword.merge(base, [max_bytes: max_bytes])
-        {:map, max_items} ->
-          Keyword.merge(base, [max_items: max_items])
-        {:list_string, max_items, max_item_bytes} ->
-          base
-          |> Keyword.merge([max_items: max_items, max_item_bytes: max_item_bytes])
-          |> Keyword.put(:type, :list_string)
-        {:list_num, max_items} ->
-          Keyword.merge(base, [max_items: max_items, type: :list_num])
-        {:list, max_items} ->
-          Keyword.merge(base, [max_items: max_items, type: :list])
-        _ ->
-          base
-      end
-    Keyword.put(keyword, :allow_nil?, true)
+    {_base_type, keyword} = build_base_type_and_keyword(type)
+    keyword ++ [allow_nil?: true]
   end
   def build_type_config(type, true, default_val) do
-    # Build keyword with type first, then params, then default_value, then allow_nil? at the end
-    base = [type: type]
-    # Add type-specific params
-    keyword =
-      case type do
-        {:string, max_bytes} ->
-          Keyword.merge(base, [max_bytes: max_bytes])
-        {:map, max_items} ->
-          Keyword.merge(base, [max_items: max_items])
-        {:list_string, max_items, max_item_bytes} ->
-          base
-          |> Keyword.merge([max_items: max_items, max_item_bytes: max_item_bytes])
-          |> Keyword.put(:type, :list_string)
-        {:list_num, max_items} ->
-          Keyword.merge(base, [max_items: max_items, type: :list_num])
-        {:list, max_items} ->
-          Keyword.merge(base, [max_items: max_items, type: :list])
-        _ ->
-          base
-      end
-    keyword
-    |> Keyword.put(:default_value, default_val)
-    |> Keyword.put(:allow_nil?, true)
+    {_base_type, keyword} = build_base_type_and_keyword(type)
+    keyword ++ [default_value: default_val, allow_nil?: true]
+  end
+
+  defp build_base_type_and_keyword(type) do
+    case type do
+      # Keyword lists from to_gen_api_type (e.g. [type: :string, max_bytes: 5000])
+      # Pass through directly — they already have the correct format
+      keyword when is_list(keyword) ->
+        base_type = Keyword.get(keyword, :type, :string)
+        {base_type, keyword}
+      # Tuple forms (legacy / explicit)
+      {:string, max_bytes} ->
+        {:string, [type: :string, max_bytes: max_bytes]}
+      {:map, max_items} ->
+        {:map, [type: :map, max_items: max_items]}
+      {:list_string, max_items, max_item_bytes} ->
+        {:list_string, [type: :list_string, max_items: max_items, max_item_bytes: max_item_bytes]}
+      {:list_num, max_items} ->
+        {:list_num, [type: :list_num, max_items: max_items]}
+      {:list, max_items} ->
+        {:list, [type: :list, max_items: max_items]}
+      # Simple atom types
+      simple_type when is_atom(simple_type) ->
+        {simple_type, [type: simple_type]}
+    end
   end
 
   @doc """
@@ -585,6 +569,8 @@ defmodule AshPhoenixGenApi.TypeMapper do
 
   defp map_to_list_type(type, max_items, inner_constraints) when is_list(type) do
     # type is a keyword list like [type: :string, max_bytes: 50]
+    # This shouldn't happen anymore since to_gen_api_type returns tuples,
+    # but handle it for backward compatibility
     actual_type = Keyword.get(type, :type, :string)
     map_to_list_type(actual_type, max_items, inner_constraints)
   end

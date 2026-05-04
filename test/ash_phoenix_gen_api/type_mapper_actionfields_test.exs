@@ -15,8 +15,8 @@ defmodule AshPhoenixGenApi.TypeMapper.ActionFieldsTest do
 
       assert arg_types == %{
                "user_id" => :string,
-               "count" => [allow_nil?: true, default_value: 0, type: :num],
-               "tags" => [allow_nil?: true, default_value: [], type: :list_string, max_items: 100, max_item_bytes: 20]
+               "count" => [type: :num, default_value: 0, allow_nil?: true],
+               "tags" => [type: :list_string, max_items: 100, max_item_bytes: 20, default_value: [], allow_nil?: true]
              }
 
       assert arg_orders == ["user_id", "count", "tags"]
