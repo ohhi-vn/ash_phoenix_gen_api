@@ -134,8 +134,6 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyDomainConfig do
     end
   end
 
-  defp valid_module_name?(_), do: false
-
   # ---------------------------------------------------------------------------
   # Push nodes verification
   # ---------------------------------------------------------------------------

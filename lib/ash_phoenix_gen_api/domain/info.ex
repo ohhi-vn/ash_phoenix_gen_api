@@ -460,7 +460,7 @@ defmodule AshPhoenixGenApi.Domain.Info do
   or `nil` if not configured.
 
   When set, `permission_callback` takes precedence over `check_permission` and
-  is stored as `{:callback, mfa}` in the FunConfig's `check_permission` field.
+  is stored in the FunConfig's `permission_callback` field.
 
   The callback function receives a map with request context (same params as FunConfig)
   and returns `true` (continue) or `false` (permission denied).

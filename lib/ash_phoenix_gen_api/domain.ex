@@ -269,8 +269,8 @@ defmodule AshPhoenixGenApi.Domain do
             end
 
         When both `permission_callback` and `check_permission` are set,
-        `permission_callback` takes precedence and is stored as
-        `{:callback, {Module, :function, []}}` in the FunConfig's `check_permission` field.
+        `permission_callback` takes precedence and is stored in the FunConfig's
+        `permission_callback` field.
 
         Defaults to `nil`.
         """

@@ -169,8 +169,8 @@ defmodule AshPhoenixGenApi.Resource do
 
         When `nil`, inherits from the section-level `permission_callback`.
         When both `permission_callback` and `check_permission` are set,
-        `permission_callback` takes precedence and is stored as
-        `{:callback, {Module, :function, []}}` in the FunConfig's `check_permission` field.
+        `permission_callback` takes precedence and is stored in the FunConfig's
+        `permission_callback` field.
 
         Defaults to the `gen_api` section-level `permission_callback` (which defaults to `nil`).
         """
@@ -494,8 +494,8 @@ defmodule AshPhoenixGenApi.Resource do
 
         When `nil`, inherits from the section-level `permission_callback`.
         When both `permission_callback` and `check_permission` are set,
-        `permission_callback` takes precedence and is stored as
-        `{:callback, {Module, :function, []}}` in the FunConfig's `check_permission` field.
+        `permission_callback` takes precedence and is stored in the FunConfig's
+        `permission_callback` field.
 
         Defaults to the `gen_api` section-level `permission_callback` (which defaults to `nil`).
         """
@@ -702,8 +702,8 @@ defmodule AshPhoenixGenApi.Resource do
             end
 
         When both `permission_callback` and `check_permission` are set,
-        `permission_callback` takes precedence and is stored as
-        `{:callback, {Module, :function, []}}` in the FunConfig's `check_permission` field.
+        `permission_callback` takes precedence and is stored in the FunConfig's
+        `permission_callback` field.
 
         Defaults to `nil`.
         """

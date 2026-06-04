@@ -270,25 +270,32 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
   defp build_fun_config(action_config, resource, dsl_state, section_defaults) do
     request_type = ActionConfig.effective_request_type(action_config)
     timeout = ActionConfig.effective_timeout(action_config, section_defaults.timeout)
-    response_type = ActionConfig.effective_response_type(action_config, section_defaults.response_type)
-    request_info = ActionConfig.effective_request_info(action_config, section_defaults.request_info)
-    permission_callback = ActionConfig.effective_permission_callback(action_config, section_defaults.permission_callback)
-    choose_node_mode = ActionConfig.effective_choose_node_mode(action_config, section_defaults.choose_node_mode)
+
+    response_type =
+      ActionConfig.effective_response_type(action_config, section_defaults.response_type)
+
+    request_info =
+      ActionConfig.effective_request_info(action_config, section_defaults.request_info)
+
+    permission_callback =
+      ActionConfig.effective_permission_callback(
+        action_config,
+        section_defaults.permission_callback
+      )
+
+    choose_node_mode =
+      ActionConfig.effective_choose_node_mode(action_config, section_defaults.choose_node_mode)
+
     nodes = ActionConfig.effective_nodes(action_config, section_defaults.nodes)
     version = ActionConfig.effective_version(action_config, section_defaults.version)
     retry = ActionConfig.effective_retry(action_config, section_defaults.retry)
     mfa = ActionConfig.effective_mfa(action_config, resource)
 
-    # Resolve check_permission with permission_callback taking precedence.
-    # Resolution order:
-    # 1. Action-level permission_callback (if set)
-    # 2. Section-level permission_callback (if set)
-    # 3. Action-level check_permission (if set)
-    # 4. Section-level check_permission (if set)
-    # 5. Built-in default of false
+    # Resolve check_permission: use the action/section-level check_permission
+    # when no permission_callback is set.
     check_permission =
       if permission_callback do
-        {:callback, permission_callback}
+        false
       else
         ActionConfig.effective_check_permission(action_config, section_defaults.check_permission)
       end
@@ -306,6 +313,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
       arg_orders: arg_orders,
       response_type: response_type,
       check_permission: check_permission,
+      permission_callback: permission_callback,
       request_info: request_info,
       version: version,
       disabled: action_config.disabled,
@@ -323,16 +331,22 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
     timeout = MfaConfig.effective_timeout(mfa_config, section_defaults.timeout)
     response_type = MfaConfig.effective_response_type(mfa_config, section_defaults.response_type)
     request_info = MfaConfig.effective_request_info(mfa_config, section_defaults.request_info)
-    permission_callback = MfaConfig.effective_permission_callback(mfa_config, section_defaults.permission_callback)
-    choose_node_mode = MfaConfig.effective_choose_node_mode(mfa_config, section_defaults.choose_node_mode)
+
+    permission_callback =
+      MfaConfig.effective_permission_callback(mfa_config, section_defaults.permission_callback)
+
+    choose_node_mode =
+      MfaConfig.effective_choose_node_mode(mfa_config, section_defaults.choose_node_mode)
+
     nodes = MfaConfig.effective_nodes(mfa_config, section_defaults.nodes)
     version = MfaConfig.effective_version(mfa_config, section_defaults.version)
     retry = MfaConfig.effective_retry(mfa_config, section_defaults.retry)
 
-    # Resolve check_permission with permission_callback taking precedence.
+    # Resolve check_permission: use the mfa/section-level check_permission
+    # when no permission_callback is set.
     check_permission =
       if permission_callback do
-        {:callback, permission_callback}
+        false
       else
         MfaConfig.effective_check_permission(mfa_config, section_defaults.check_permission)
       end
@@ -363,6 +377,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
       arg_orders: arg_orders,
       response_type: response_type,
       check_permission: check_permission,
+      permission_callback: permission_callback,
       request_info: request_info,
       version: version,
       disabled: mfa_config.disabled,
@@ -384,11 +399,12 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
     cond do
       # Both explicitly provided (arg_orders is a list, arg_types is a map)
       is_list(explicit_arg_orders) and explicit_arg_orders != [] and
-          is_map(explicit_arg_types) and map_size(explicit_arg_types) > 0 ->
+        is_map(explicit_arg_types) and map_size(explicit_arg_types) > 0 ->
         {explicit_arg_types, explicit_arg_orders}
 
       # arg_orders is :map (default) — keep :map so FunConfig passes args as a map
-      explicit_arg_orders == :map and is_map(explicit_arg_types) and map_size(explicit_arg_types) > 0 ->
+      explicit_arg_orders == :map and is_map(explicit_arg_types) and
+          map_size(explicit_arg_types) > 0 ->
         {explicit_arg_types, :map}
 
       # Auto-derive from the Ash action definition — arg_orders defaults to :map
@@ -487,7 +503,9 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
     else
       action_type = ash_action.type
       bang_name = String.to_atom("#{action_name}!")
-      result_encoder = ActionConfig.effective_result_encoder(action_config, section_defaults.result_encoder)
+
+      result_encoder =
+        ActionConfig.effective_result_encoder(action_config, section_defaults.result_encoder)
 
       case action_type do
         :create ->
@@ -535,6 +553,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
         @doc unquote(doc_string)
         def unquote(action_name)(params_or_opts \\ [], opts \\ []) do
           {args, opts} = CodeInterface.params_and_opts(params_or_opts, opts)
+
           Changeset.for_create(__MODULE__, unquote(action_name), args, opts)
           |> Ash.create(opts)
           |> AshPhoenixGenApi.Codec.encode_result(unquote(result_encoder_escaped))
@@ -544,6 +563,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
         @doc unquote(bang_doc_string)
         def unquote(bang_name)(params_or_opts \\ [], opts \\ []) do
           {args, opts} = CodeInterface.params_and_opts(params_or_opts, opts)
+
           Changeset.for_create(__MODULE__, unquote(action_name), args, opts)
           |> Ash.create!(opts)
           |> AshPhoenixGenApi.Codec.encode_value(unquote(result_encoder_escaped))
@@ -579,6 +599,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
         @doc unquote(doc_string)
         def unquote(action_name)(params_or_opts \\ [], opts \\ []) do
           {args, opts} = CodeInterface.params_and_opts(params_or_opts, opts)
+
           Query.for_read(__MODULE__, unquote(action_name), args, opts)
           |> Ash.read(opts)
           |> AshPhoenixGenApi.Codec.encode_result(unquote(result_encoder_escaped))
@@ -588,6 +609,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
         @doc unquote(bang_doc_string)
         def unquote(bang_name)(params_or_opts \\ [], opts \\ []) do
           {args, opts} = CodeInterface.params_and_opts(params_or_opts, opts)
+
           Query.for_read(__MODULE__, unquote(action_name), args, opts)
           |> Ash.read!(opts)
           |> AshPhoenixGenApi.Codec.encode_value(unquote(result_encoder_escaped))
@@ -624,6 +646,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
         @doc unquote(doc_string)
         def unquote(action_name)(record, params_or_opts \\ [], opts \\ []) do
           {args, opts} = CodeInterface.params_and_opts(params_or_opts, opts)
+
           Changeset.for_update(record, unquote(action_name), args, opts)
           |> Ash.update(opts)
           |> AshPhoenixGenApi.Codec.encode_result(unquote(result_encoder_escaped))
@@ -633,6 +656,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
         @doc unquote(bang_doc_string)
         def unquote(bang_name)(record, params_or_opts \\ [], opts \\ []) do
           {args, opts} = CodeInterface.params_and_opts(params_or_opts, opts)
+
           Changeset.for_update(record, unquote(action_name), args, opts)
           |> Ash.update!(opts)
           |> AshPhoenixGenApi.Codec.encode_value(unquote(result_encoder_escaped))
@@ -669,6 +693,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
         @doc unquote(doc_string)
         def unquote(action_name)(record, params_or_opts \\ [], opts \\ []) do
           {args, opts} = CodeInterface.params_and_opts(params_or_opts, opts)
+
           Changeset.for_destroy(record, unquote(action_name), args, opts)
           |> Ash.destroy(opts)
           |> AshPhoenixGenApi.Codec.encode_result(unquote(result_encoder_escaped))
@@ -678,6 +703,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
         @doc unquote(bang_doc_string)
         def unquote(bang_name)(record, params_or_opts \\ [], opts \\ []) do
           {args, opts} = CodeInterface.params_and_opts(params_or_opts, opts)
+
           Changeset.for_destroy(record, unquote(action_name), args, opts)
           |> Ash.destroy!(opts)
           |> AshPhoenixGenApi.Codec.encode_value(unquote(result_encoder_escaped))
@@ -713,6 +739,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
         @doc unquote(doc_string)
         def unquote(action_name)(params_or_opts \\ [], opts \\ []) do
           {args, opts} = CodeInterface.params_and_opts(params_or_opts, opts)
+
           ActionInput.for_action(__MODULE__, unquote(action_name), args, opts)
           |> Ash.run_action(opts)
           |> AshPhoenixGenApi.Codec.encode_result(unquote(result_encoder_escaped))
@@ -722,6 +749,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
         @doc unquote(bang_doc_string)
         def unquote(bang_name)(params_or_opts \\ [], opts \\ []) do
           {args, opts} = CodeInterface.params_and_opts(params_or_opts, opts)
+
           ActionInput.for_action(__MODULE__, unquote(action_name), args, opts)
           |> Ash.run_action!(opts)
           |> AshPhoenixGenApi.Codec.encode_value(unquote(result_encoder_escaped))

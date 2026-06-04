@@ -11,7 +11,6 @@ defmodule AshPhoenixGenApi.Resource.SharedTypes do
           | :any_authenticated
           | {:arg, String.t()}
           | {:role, [String.t()]}
-          | {:callback, {module(), atom(), [any()]}}
 
   @type permission_callback :: {module(), atom(), [any()]} | nil
 

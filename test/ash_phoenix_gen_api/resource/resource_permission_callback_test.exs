@@ -87,11 +87,12 @@ defmodule AshPhoenixGenApi.Resource.PermissionCallbackTest do
   end
 
   describe "permission_callback in FunConfig generation" do
-    test "permission_callback is stored as {:callback, mfa} in FunConfig check_permission" do
+    test "permission_callback is stored in FunConfig permission_callback field" do
       fun_configs = AshPhoenixGenApi.Resource.Info.fun_configs(PermissionCallbackResource)
 
       for config <- fun_configs do
-        assert config.check_permission == {:callback, {TestPermissionChecker, :check_permission, []}}
+        assert config.permission_callback == {TestPermissionChecker, :check_permission, []}
+        assert config.check_permission == false
       end
     end
 
@@ -144,8 +145,10 @@ defmodule AshPhoenixGenApi.Resource.PermissionCallbackTest do
       create_config = Enum.find(fun_configs, &(&1.request_type == "create"))
       read_config = Enum.find(fun_configs, &(&1.request_type == "read"))
 
-      assert create_config.check_permission == {:callback, {TestPermissionChecker, :deny_all, []}}
-      assert read_config.check_permission == {:callback, {TestPermissionChecker, :check_permission, []}}
+      assert create_config.permission_callback == {TestPermissionChecker, :deny_all, []}
+      assert create_config.check_permission == false
+      assert read_config.permission_callback == {TestPermissionChecker, :check_permission, []}
+      assert read_config.check_permission == false
     end
 
     test "check_permission is used when permission_callback is nil" do

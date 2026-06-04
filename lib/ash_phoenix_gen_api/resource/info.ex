@@ -409,7 +409,7 @@ defmodule AshPhoenixGenApi.Resource.Info do
   3. Built-in default of `nil`
 
   When `permission_callback` is set, it takes precedence over `check_permission`
-  and is stored as `{:callback, mfa}` in the FunConfig's `check_permission` field.
+  and is stored in the FunConfig's `permission_callback` field.
 
   ## Parameters
 
