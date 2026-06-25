@@ -7,6 +7,7 @@ defmodule AshPhoenixGenApi.ResourceWithExplicitArgsTest do
 
   defmodule ExplicitArgsResource do
     use Ash.Resource,
+      domain: nil,
       extensions: [AshPhoenixGenApi.Resource]
 
     attributes do

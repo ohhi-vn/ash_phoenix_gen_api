@@ -79,9 +79,12 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyActionConfigs do
         MapSet.member?(resource_action_names, action_config.name)
       end)
       |> Enum.map(fn action_config ->
+        location = get_entity_location(action_config)
+        source_info = format_source_location(location)
+
         "The action `#{inspect(action_config.name)}` does not exist on " <>
           "resource `#{inspect(resource)}`. Available actions: " <>
-          "#{inspect(MapSet.to_list(resource_action_names))}"
+          "#{inspect(MapSet.to_list(resource_action_names))}" <> source_info
       end)
 
     if errors == [] do
@@ -492,12 +495,53 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyActionConfigs do
           []
 
         permission_callback ->
+          location = get_entity_location(config)
+          source_info = format_source_location(location)
+
           [
             "#{type} `#{config.name}`: invalid permission_callback `#{inspect(permission_callback)}`. " <>
               "Expected `{Module, :function, []}` where Module and function are atoms " <>
-              "and args is a list, or `nil`."
+              "and args is a list, or `nil`." <> source_info
           ]
       end
     end)
   end
+
+  # ---------------------------------------------------------------------------
+  # Source annotation helpers
+  # ---------------------------------------------------------------------------
+
+  @doc false
+  defp get_entity_location(%{__spark_metadata__: metadata}) when is_map(metadata) do
+    case Map.get(metadata, :anno) do
+      nil ->
+        case Map.get(metadata, :entity_anno) do
+          nil -> nil
+          anno -> anno
+        end
+
+      anno ->
+        anno
+    end
+  end
+
+  defp get_entity_location(_), do: nil
+
+  @doc false
+  defp format_source_location(nil), do: ""
+
+  defp format_source_location(anno) when is_tuple(anno) do
+    line = :erl_anno.location(anno)
+    file = :erl_anno.file(anno)
+
+    source_file =
+      case file do
+        :undefined -> ""
+        charlist -> " (source: #{Path.relative_to_cwd(to_string(charlist))}:#{line})"
+      end
+
+    "\n  Defined at#{source_file}"
+  end
+
+  defp format_source_location(_), do: ""
 end

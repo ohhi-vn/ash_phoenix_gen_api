@@ -177,6 +177,7 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyDomainConfig do
       :ok
     else
       errors = build_mfa_error_parts(mod, fun, args)
+
       raise SparkDslError,
         module: domain,
         path: [:gen_api, :push_nodes],
@@ -225,6 +226,7 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyDomainConfig do
       :ok
     else
       errors = build_mfa_error_parts(mod, fun, args)
+
       raise SparkDslError,
         module: domain,
         path: [:gen_api, :permission_callback],
@@ -323,10 +325,20 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyDomainConfig do
         resource_service = extract_opt(ResourceInfo.gen_api_service(resource), nil)
 
         if is_nil(resource_service) and is_nil(domain_service) do
+          # Try to find the resource's gen_api section annotation for better debugging
+          resource_anno = get_resource_gen_api_anno(resource)
+          source_info = format_source_location(resource_anno)
+
           [
-            "Resource `#{inspect(resource)}` has gen_api configured but no service name. " <>
-              "Either configure a service on the resource's gen_api section " <>
-              "or on the domain's gen_api section."
+            "No service configured for `#{inspect(resource)}`." <> source_info <> "\n" <>
+              "Set `service` in the resource's `gen_api` block, e.g.:\n" <>
+              "  gen_api do\n" <>
+              "    service \"my_service\"\n" <>
+              "  end\n" <>
+              "Or set it at the domain level to apply to all resources:\n" <>
+              "  gen_api do\n" <>
+              "    service \"my_service\"\n" <>
+              "  end"
           ]
         else
           []
@@ -404,6 +416,36 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyDomainConfig do
         #{Enum.join(duplicates, "\n\n")}
         """
     end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Source annotation helpers
+  # ---------------------------------------------------------------------------
+
+  @doc false
+  defp get_resource_gen_api_anno(resource) do
+    try do
+      dsl_state = resource.spark_dsl_config()
+      Spark.Dsl.Extension.get_section_anno(dsl_state, [:gen_api])
+    rescue
+      _ -> nil
+    end
+  end
+
+  @doc false
+  defp format_source_location(nil), do: ""
+
+  defp format_source_location(anno) when is_tuple(anno) do
+    line = :erl_anno.location(anno)
+    file = :erl_anno.file(anno)
+
+    source_file =
+      case file do
+        :undefined -> ""
+        charlist -> " (source: #{Path.relative_to_cwd(to_string(charlist))}:#{line})"
+      end
+
+    "\n  Defined at#{source_file}"
   end
 
   # ---------------------------------------------------------------------------

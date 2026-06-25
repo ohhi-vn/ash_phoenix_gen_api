@@ -10,6 +10,7 @@ defmodule AshPhoenixGenApi.Resource.MfaMinimalTest do
 
   defmodule MinimalMfaResource do
     use Ash.Resource,
+      domain: nil,
       extensions: [AshPhoenixGenApi.Resource]
 
     attributes do

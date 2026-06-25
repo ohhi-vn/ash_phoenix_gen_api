@@ -7,6 +7,7 @@ defmodule AshPhoenixGenApi.ResourceMinimalTest do
 
   defmodule MinimalResource do
     use Ash.Resource,
+      domain: nil,
       extensions: [AshPhoenixGenApi.Resource]
 
     attributes do

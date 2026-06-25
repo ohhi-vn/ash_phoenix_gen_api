@@ -30,6 +30,7 @@ defmodule AshPhoenixGenApi.Resource.ResultEncoderCustomMfaTest do
 
   defmodule CustomMfaResource do
     use Ash.Resource,
+      domain: nil,
       domain: AshPhoenixGenApi.Resource.ResultEncoderCustomMfaTest.TestDomain,
       extensions: [AshPhoenixGenApi.Resource],
       data_layer: Ash.DataLayer.Ets

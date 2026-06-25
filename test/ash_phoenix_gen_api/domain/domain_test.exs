@@ -3,6 +3,8 @@
 defmodule AshPhoenixGenApi.DomainTest do
   use ExUnit.Case
 
+  import Spark.Test
+
   @moduletag timeout: 60_000
 
 
@@ -27,6 +29,24 @@ defmodule AshPhoenixGenApi.DomainTest do
   end
 
   describe "domain DSL" do
+    test "valid domain compiles without errors" do
+      refute_dsl_errors do
+        defmodule Elixir.SparkTestValidDomain do
+          use Ash.Domain,
+            extensions: [AshPhoenixGenApi.Domain]
+
+          gen_api do
+            service "spark_test"
+            supporter_module Elixir.SparkTestValidDomain.Supporter
+            version "1.0.0"
+          end
+
+          resources do
+          end
+        end
+      end
+    end
+
     test "domain compiles with gen_api extension" do
       assert Ash.Domain.Info.extensions(TestDomain) |> Enum.any?(&(&1 == AshPhoenixGenApi.Domain))
     end

@@ -213,6 +213,9 @@ defmodule AshPhoenixGenApi.Resource do
         doc: """
         Version string for this API endpoint. Used for API versioning.
         Defaults to the `gen_api` section-level `version` (which defaults to `"0.0.1"`).
+
+        **Format**: Should follow [Semantic Versioning](https://semver.org) (e.g., `"1.0.0"`).
+        If not set at the resource level, inherits from the domain-level `version`.
         """
       ],
       mfa: [

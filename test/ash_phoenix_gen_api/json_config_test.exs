@@ -11,6 +11,7 @@ defmodule AshPhoenixGenApi.JsonConfigTest do
 
   defmodule ChatMessage do
     use Ash.Resource,
+      domain: nil,
       domain: AshPhoenixGenApi.JsonConfigTest.ChatDomain,
       extensions: [AshPhoenixGenApi.Resource]
 
@@ -85,6 +86,7 @@ defmodule AshPhoenixGenApi.JsonConfigTest do
 
   defmodule DisabledActionResource do
     use Ash.Resource,
+      domain: nil,
       domain: AshPhoenixGenApi.JsonConfigTest.ChatDomain,
       extensions: [AshPhoenixGenApi.Resource]
 

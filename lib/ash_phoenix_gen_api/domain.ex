@@ -281,6 +281,12 @@ defmodule AshPhoenixGenApi.Domain do
         doc: """
         Default version string for all resources in this domain.
         Used for PhoenixGenApi API versioning.
+
+        **Format**: Should follow [Semantic Versioning](https://semver.org) (e.g., `"1.0.0"`).
+        Each resource can set its own `version` in its `gen_api` section, but it is
+        recommended to keep versions consistent across resources in the same domain.
+        The domain-level version is returned by `get_config_version/1` on the
+        generated supporter module.
         """
       ],
       retry: [
@@ -295,7 +301,7 @@ defmodule AshPhoenixGenApi.Domain do
         """
       ],
       supporter_module: [
-        type: :atom,
+        type: :any,
         required: true,
         doc: """
         The name of the module to generate that will serve as the PhoenixGenApi
@@ -350,6 +356,22 @@ defmodule AshPhoenixGenApi.Domain do
         be called during application startup to push the config to gateway nodes.
         Note: you still need to hook this into your application's supervision
         tree or startup sequence manually.
+
+        **Failure behavior**: If a gateway node is unreachable when `push_on_startup/2`
+        is called, the function will return `{:error, reason}` (e.g., `{:error, :node_down}`).
+        It does **not** crash the calling process. The caller is responsible for
+        deciding whether to retry or log the failure. For automatic retry with
+        backoff, consider wrapping the call in a `Task` with retry logic:
+
+            Task.start(fn ->
+              case MyApp.Chat.GenApiSupporter.push_on_startup(node) do
+                :ok -> :ok
+                {:error, _reason} ->
+                  # Implement retry with backoff
+                  :timer.sleep(1000)
+                  MyApp.Chat.GenApiSupporter.push_on_startup(node)
+              end
+            end)
         """
       ],
       result_encoder: [

@@ -2,7 +2,13 @@
 
 # AshPhoenixGenApi
 
+[![CI](https://github.com/ohhi-vn/ash_phoenix_gen_api/actions/workflows/ci.yml/badge.svg)](https://github.com/ohhi-vn/ash_phoenix_gen_api/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/badge/coverage-excoveralls-blue.svg)](https://coveralls.io/github/ohhi-vn/ash_phoenix_gen_api)
+[![Hex Version](https://img.shields.io/hexpm/v/ash_phoenix_gen_api.svg)](https://hex.pm/packages/ash_phoenix_gen_api)
+
 An Ash Framework extension for generating [PhoenixGenApi](https://github.com/ohhi-vn/phoenix_gen_api) function configurations from Ash resources and domains.
+
+**What is PhoenixGenApi?** [PhoenixGenApi](https://github.com/ohhi-vn/phoenix_gen_api) is a Elixir framework for building distributed, service-oriented APIs. It uses a "supporter" module pattern where service nodes expose function configurations that gateway nodes can pull or subscribe to. This extension bridges [Ash Framework](https://ash-hq.org) and PhoenixGenApi by automatically generating those function configurations from your Ash resource definitions.
 
 `AshPhoenixGenApi` bridges the Ash Framework and PhoenixGenApi by allowing you to define PhoenixGenApi endpoints directly in your Ash resource and domain DSLs. It automatically generates `PhoenixGenApi.Structs.FunConfig` structs from your Ash actions, including type mappings, argument ordering, and configuration defaults.
 

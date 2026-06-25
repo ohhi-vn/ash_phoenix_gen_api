@@ -152,6 +152,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineDomainSupporter do
   Runs after the DefineFunConfigs transformer so that resource FunConfigs
   are already generated.
   """
+
   # @impl true
   # def after?(_), do: true
 
@@ -172,51 +173,52 @@ defmodule AshPhoenixGenApi.Transformers.DefineDomainSupporter do
 
     Enum.each(resources, fn resource_info -> Code.ensure_compiled(resource_info.resource) end)
 
-
     domain = SparkTransformer.get_persisted(dsl_state, :module)
 
     # Check if gen_api is configured on this domain
     supporter_module = extract_opt(Info.gen_api_supporter_module(dsl_state), nil)
     define_supporter? = extract_opt(Info.gen_api_define_supporter?(dsl_state), true)
 
-    if is_nil(supporter_module) do
+    if is_nil(supporter_module) or not is_atom(supporter_module) do
       # No gen_api configured on this domain — skip
+      # Also skip if supporter_module is not an atom (invalid config);
+      # the VerifyDomainConfig verifier will raise the appropriate error.
       {:ok, dsl_state}
     else
       if define_supporter? do
-          version = extract_opt(Info.gen_api_version(dsl_state), "0.0.1")
-          service = extract_opt(Info.gen_api_service(dsl_state), nil)
-          push_nodes = extract_opt(Info.gen_api_push_nodes(dsl_state), nil)
+        version = extract_opt(Info.gen_api_version(dsl_state), "0.0.1")
+        service = extract_opt(Info.gen_api_service(dsl_state), nil)
+        push_nodes = extract_opt(Info.gen_api_push_nodes(dsl_state), nil)
 
-          # We use runtime resource discovery instead of compile-time enumeration
-          # because resource modules may not be fully compiled when the domain
-          # transformer runs (e.g. when both are defined in the same test file).
-          # The generated fun_configs/0 function will discover resources at
-          # runtime by querying the domain and checking for the
-          # __ash_phoenix_gen_api_fun_configs__/0 export.
+        # We use runtime resource discovery instead of compile-time enumeration
+        # because resource modules may not be fully compiled when the domain
+        # transformer runs (e.g. when both are defined in the same test file).
+        # The generated fun_configs/0 function will discover resources at
+        # runtime by querying the domain and checking for the
+        # __ash_phoenix_gen_api_fun_configs__/0 export.
 
-          version_string = version || "0.0.1"
-          service_string = if is_atom(service), do: Atom.to_string(service), else: service
+        version_string = version || "0.0.1"
+        service_string = if is_atom(service), do: Atom.to_string(service), else: service
 
-          domain_escaped = Macro.escape(domain)
-          service_string_escaped = Macro.escape(service_string)
-          version_string_escaped = Macro.escape(version_string)
-          push_nodes_escaped = Macro.escape(push_nodes)
+        domain_escaped = Macro.escape(domain)
+        service_string_escaped = Macro.escape(service_string)
+        version_string_escaped = Macro.escape(version_string)
+        push_nodes_escaped = Macro.escape(push_nodes)
 
-          dsl_state =
-            SparkTransformer.eval(
-              dsl_state,
-              [],
-              generate_supporter_module(
-                domain_escaped,
-                service_string_escaped,
-                version_string_escaped,
-                push_nodes_escaped,
-                supporter_module
-              )
+        dsl_state =
+          SparkTransformer.eval(
+            dsl_state,
+            [],
+            generate_supporter_module(
+              domain_escaped,
+              service_string_escaped,
+              version_string_escaped,
+              push_nodes_escaped,
+              supporter_module
             )
+          )
 
-          {:ok, dsl_state}
+        {:ok, dsl_state}
       else
         # define_supporter? is false — skip module generation
         {:ok, dsl_state}
@@ -266,10 +268,18 @@ defmodule AshPhoenixGenApi.Transformers.DefineDomainSupporter do
   # Supporter module generation helpers
   # ---------------------------------------------------------------------------
 
-  defp generate_supporter_module(domain_escaped, service_string_escaped, version_string_escaped, push_nodes_escaped, supporter_module) do
+  defp generate_supporter_module(
+         domain_escaped,
+         service_string_escaped,
+         version_string_escaped,
+         push_nodes_escaped,
+         supporter_module
+       ) do
     quote do
       defmodule unquote(supporter_module) do
-        unquote(generate_moduledoc(domain_escaped, service_string_escaped, version_string_escaped))
+        unquote(
+          generate_moduledoc(domain_escaped, service_string_escaped, version_string_escaped)
+        )
 
         alias PhoenixGenApi.Structs.FunConfig
 
@@ -277,7 +287,14 @@ defmodule AshPhoenixGenApi.Transformers.DefineDomainSupporter do
 
         unquote(generate_get_config_functions(version_string_escaped))
         unquote(generate_fun_config_functions(domain_escaped))
-        unquote(generate_push_config_functions(service_string_escaped, version_string_escaped, push_nodes_escaped))
+
+        unquote(
+          generate_push_config_functions(
+            service_string_escaped,
+            version_string_escaped,
+            push_nodes_escaped
+          )
+        )
       end
     end
   end
@@ -374,7 +391,11 @@ defmodule AshPhoenixGenApi.Transformers.DefineDomainSupporter do
     end
   end
 
-  defp generate_push_config_functions(service_string_escaped, version_string_escaped, push_nodes_escaped) do
+  defp generate_push_config_functions(
+         service_string_escaped,
+         version_string_escaped,
+         push_nodes_escaped
+       ) do
     quote do
       @doc """
       Builds a PushConfig struct from this domain's configuration.
@@ -388,12 +409,20 @@ defmodule AshPhoenixGenApi.Transformers.DefineDomainSupporter do
       def build_push_config do
         resolved_nodes =
           case unquote(push_nodes_escaped) do
-            nil -> nil
-            :local -> [Node.self()]
-            nodes when is_list(nodes) -> nodes
+            nil ->
+              nil
+
+            :local ->
+              [Node.self()]
+
+            nodes when is_list(nodes) ->
+              nodes
+
             {mod, fun, args} when is_atom(mod) and is_atom(fun) and is_list(args) ->
               apply(mod, fun, args)
-            _ -> nil
+
+            _ ->
+              nil
           end
 
         struct(PhoenixGenApi.Structs.PushConfig, %{
@@ -410,11 +439,21 @@ defmodule AshPhoenixGenApi.Transformers.DefineDomainSupporter do
         })
       end
 
-      unquote(generate_gateway_functions(service_string_escaped, version_string_escaped, push_nodes_escaped))
+      unquote(
+        generate_gateway_functions(
+          service_string_escaped,
+          version_string_escaped,
+          push_nodes_escaped
+        )
+      )
     end
   end
 
-  defp generate_gateway_functions(service_string_escaped, version_string_escaped, push_nodes_escaped) do
+  defp generate_gateway_functions(
+         service_string_escaped,
+         version_string_escaped,
+         push_nodes_escaped
+       ) do
     quote do
       @doc """
       Pushes this domain's configuration to the specified gateway node.
@@ -494,12 +533,20 @@ defmodule AshPhoenixGenApi.Transformers.DefineDomainSupporter do
       """
       def resolve_push_nodes do
         case unquote(push_nodes_escaped) do
-          nil -> nil
-          :local -> [Node.self()]
-          nodes when is_list(nodes) -> nodes
+          nil ->
+            nil
+
+          :local ->
+            [Node.self()]
+
+          nodes when is_list(nodes) ->
+            nodes
+
           {mod, fun, args} when is_atom(mod) and is_atom(fun) and is_list(args) ->
             apply(mod, fun, args)
-          _ -> nil
+
+          _ ->
+            nil
         end
       end
     end

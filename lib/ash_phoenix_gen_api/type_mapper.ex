@@ -50,11 +50,114 @@ defmodule AshPhoenixGenApi.TypeMapper do
   | `:ci_string` / `Ash.Type.CiString` | `:string` |
   | `:duration` / `Ash.Type.Duration` | `:string` |
   | `:duration_name` / `Ash.Type.DurationName` | `:string` |
+  | `Ash.Type.Enum` | `:string` |
+  | `:enum` | `:string` |
+
+  **Notes:**
+
+  - `{:array, :uuid}` maps to `{:list_string, 1000, 50}` — UUIDs are always 36 characters,
+    so the 50-byte `max_item_bytes` cap provides a small safety margin.
+  - `Ash.Type.Enum` and `:enum` map to `:string`. If PhoenixGenApi adds native enum
+    validation in the future, consider registering a custom mapping via
+    `AshPhoenixGenApi.TypeMapper.register/2`.
+  - Custom Ash types (types that use `Ash.Type`) that are not in this table will
+    attempt to resolve via `type/1` and recursively map. If resolution fails, they
+    default to `:string`. Use `register/2` to provide an explicit mapping.
   """
 
   @default_max_list_items 1000
   @default_max_string_item_length 50
   @default_max_map_items 1000
+
+  # Persistent storage for custom type mappings (cross-process)
+  @custom_type_mappings_table :custom_type_mappings_table
+
+  @doc """
+  Registers a custom type mapping.
+
+  Allows users to extend or override the default Ash-to-PhoenixGenApi type mappings
+  for custom Ash types (types that use `Ash.Type`).
+
+  ## Parameters
+
+  - `ash_type` — The Ash type module (e.g., `MyApp.CustomType`) or a type identifier
+  - `gen_api_type` — The PhoenixGenApi type to map to (e.g., `:string`, `:num`, `{:string, 255}`)
+
+  ## Examples
+
+      # In your application startup or config:
+      AshPhoenixGenApi.TypeMapper.register(MyApp.CustomType, :string)
+      AshPhoenixGenApi.TypeMapper.register(MyApp.Types.Status, :num)
+
+  """
+  @spec register(atom() | module(), atom() | tuple()) :: :ok
+  def register(ash_type, gen_api_type) do
+    table = :persistent_term.get(@custom_type_mappings_table, %{})
+    :persistent_term.put(@custom_type_mappings_table, Map.put(table, ash_type, gen_api_type))
+    :ok
+  end
+
+  @doc """
+  Unregisters a custom type mapping.
+
+  ## Examples
+
+      AshPhoenixGenApi.TypeMapper.unregister(MyApp.CustomType)
+
+  """
+  @spec unregister(atom() | module()) :: :ok
+  def unregister(ash_type) do
+    table = :persistent_term.get(@custom_type_mappings_table, %{})
+    :persistent_term.put(@custom_type_mappings_table, Map.delete(table, ash_type))
+    :ok
+  end
+
+  @doc """
+  Looks up a registered custom type mapping.
+
+  Returns `{:ok, gen_api_type}` if a mapping exists, or `:error` if not registered.
+
+  ## Examples
+
+      iex> AshPhoenixGenApi.TypeMapper.register(MyCustomType, :string)
+      iex> AshPhoenixGenApi.TypeMapper.lookup(MyCustomType)
+      {:ok, :string}
+
+      iex> AshPhoenixGenApi.TypeMapper.lookup(UnregisteredType)
+      :error
+  """
+  @spec lookup(atom() | module()) :: {:ok, atom() | tuple()} | :error
+  def lookup(ash_type) do
+    table = :persistent_term.get(@custom_type_mappings_table, %{})
+
+    case Map.fetch(table, ash_type) do
+      :error -> :error
+      {:ok, type} -> {:ok, type}
+    end
+  end
+
+  @doc """
+  Returns all registered custom type mappings.
+
+  ## Examples
+
+      AshPhoenixGenApi.TypeMapper.register(MyType, :string)
+      mappings = AshPhoenixGenApi.TypeMapper.custom_mappings()
+      %{MyType => :string} = mappings
+  """
+  @spec custom_mappings() :: %{(atom() | module()) => atom() | tuple()}
+  def custom_mappings do
+    :persistent_term.get(@custom_type_mappings_table, %{})
+  end
+
+  @doc """
+  Clears all registered custom type mappings.
+  """
+  @spec clear_custom_mappings() :: :ok
+  def clear_custom_mappings do
+    :persistent_term.put(@custom_type_mappings_table, %{})
+    :ok
+  end
 
   @doc """
   Maps an Ash type to a PhoenixGenApi argument type.
@@ -115,11 +218,17 @@ defmodule AshPhoenixGenApi.TypeMapper do
           | {:list_num, pos_integer()}
   # String types
   def to_gen_api_type(type, constraints \\ [])
+
   def to_gen_api_type(:string, constraints) do
     case Keyword.get(constraints, :max_length) do
-      nil -> :string
-      max_length when is_integer(max_length) and max_length > 0 -> [type: :string, max_bytes: max_length]
-      _ -> :string
+      nil ->
+        :string
+
+      max_length when is_integer(max_length) and max_length > 0 ->
+        [type: :string, max_bytes: max_length]
+
+      _ ->
+        :string
     end
   end
 
@@ -127,13 +236,19 @@ defmodule AshPhoenixGenApi.TypeMapper do
 
   def to_gen_api_type(:ci_string, constraints) do
     case Keyword.get(constraints, :max_length) do
-      nil -> :string
-      max_length when is_integer(max_length) and max_length > 0 -> [type: :string, max_bytes: max_length]
-      _ -> :string
+      nil ->
+        :string
+
+      max_length when is_integer(max_length) and max_length > 0 ->
+        [type: :string, max_bytes: max_length]
+
+      _ ->
+        :string
     end
   end
 
-  def to_gen_api_type(Ash.Type.CiString, constraints), do: to_gen_api_type(:ci_string, constraints)
+  def to_gen_api_type(Ash.Type.CiString, constraints),
+    do: to_gen_api_type(:ci_string, constraints)
 
   # Numeric types
   def to_gen_api_type(:integer, _constraints), do: :num
@@ -178,10 +293,6 @@ defmodule AshPhoenixGenApi.TypeMapper do
   # Boolean
   def to_gen_api_type(:boolean, _constraints), do: :boolean
   def to_gen_api_type(Ash.Type.Boolean, _constraints), do: :boolean
-
-  # Atom - serialized as string
-  def to_gen_api_type(:atom, _constraints), do: :string
-  def to_gen_api_type(Ash.Type.Atom, _constraints), do: :string
 
   # Map types - map to :map with optional max_items constraint
   def to_gen_api_type(:map, constraints) do
@@ -241,15 +352,22 @@ defmodule AshPhoenixGenApi.TypeMapper do
   # File type (if using ash_type_file or similar)
   def to_gen_api_type(:file, _constraints), do: :string
 
-  # Catch-all: try to resolve the type module, otherwise default to :string
+  # Catch-all: check custom mappings first, then try to resolve the type module,
+  # otherwise default to :string
   def to_gen_api_type(ash_type, constraints) when is_atom(ash_type) do
-    if function_exported?(ash_type, :type, 1) do
-      # It's an Ash type module, try to get the underlying type
-      underlying = ash_type.type(constraints)
-      to_gen_api_type(underlying, constraints)
-    else
-      # Unknown type, default to string
-      :string
+    case :persistent_term.get(@custom_type_mappings_table, %{}) do
+      %{^ash_type => custom_type} ->
+        custom_type
+
+      _ ->
+        if function_exported?(ash_type, :type, 1) do
+          # It's an Ash type module, try to get the underlying type
+          underlying = ash_type.type(constraints)
+          to_gen_api_type(underlying, constraints)
+        else
+          # Unknown type, default to string
+          :string
+        end
     end
   end
 
@@ -443,7 +561,9 @@ defmodule AshPhoenixGenApi.TypeMapper do
   - `arg_types` is a map of `field_name_string => gen_api_type`
   - `arg_orders` is a list of field name strings in order
   """
-  @spec build_arg_config([{atom(), atom() | tuple(), boolean()} | {atom(), atom() | tuple(), boolean(), any()}]) :: {map(), [String.t()]}
+  @spec build_arg_config([
+          {atom(), atom() | tuple(), boolean()} | {atom(), atom() | tuple(), boolean(), any()}
+        ]) :: {map(), [String.t()]}
   def build_arg_config(fields) do
     arg_orders =
       fields
@@ -462,7 +582,9 @@ defmodule AshPhoenixGenApi.TypeMapper do
   end
 
   defp extract_field_info({name, type, allow_nil?}), do: {name, type, allow_nil?, nil}
-  defp extract_field_info({name, type, allow_nil?, default_val}), do: {name, type, allow_nil?, default_val}
+
+  defp extract_field_info({name, type, allow_nil?, default_val}),
+    do: {name, type, allow_nil?, default_val}
 
   @doc """
   Gets the default value from an Ash attribute or argument.
@@ -472,10 +594,12 @@ defmodule AshPhoenixGenApi.TypeMapper do
   def get_ash_default_value(%{default: default}) when not is_function(default) do
     default
   end
+
   def get_ash_default_value(%{default: default}) when is_function(default) do
     # For functions, we can't call them here (compile-time), so return nil
     nil
   end
+
   def get_ash_default_value(_), do: nil
 
   @doc """
@@ -498,10 +622,12 @@ defmodule AshPhoenixGenApi.TypeMapper do
   """
   @spec build_type_config(atom() | tuple(), boolean(), any()) :: atom() | tuple() | keyword()
   def build_type_config(type, false, _default_val), do: type
+
   def build_type_config(type, true, nil) do
     {_base_type, keyword} = build_base_type_and_keyword(type)
     keyword ++ [allow_nil?: true]
   end
+
   def build_type_config(type, true, default_val) do
     {_base_type, keyword} = build_base_type_and_keyword(type)
     keyword ++ [default_value: default_val, allow_nil?: true]
@@ -514,17 +640,23 @@ defmodule AshPhoenixGenApi.TypeMapper do
       keyword when is_list(keyword) ->
         base_type = Keyword.get(keyword, :type, :string)
         {base_type, keyword}
+
       # Tuple forms (legacy / explicit)
       {:string, max_bytes} ->
         {:string, [type: :string, max_bytes: max_bytes]}
+
       {:map, max_items} ->
         {:map, [type: :map, max_items: max_items]}
+
       {:list_string, max_items, max_item_bytes} ->
         {:list_string, [type: :list_string, max_items: max_items, max_item_bytes: max_item_bytes]}
+
       {:list_num, max_items} ->
         {:list_num, [type: :list_num, max_items: max_items]}
+
       {:list, max_items} ->
         {:list, [type: :list, max_items: max_items]}
+
       # Simple atom types
       simple_type when is_atom(simple_type) ->
         {simple_type, [type: simple_type]}
@@ -548,14 +680,14 @@ defmodule AshPhoenixGenApi.TypeMapper do
       iex> AshPhoenixGenApi.TypeMapper.wrap_nil_type(:num)
       {:nil, :num}
   """
-  @spec wrap_nil_type(atom() | tuple()) :: {:nil, atom() | tuple()}
+  @spec wrap_nil_type(atom() | tuple()) :: {nil, atom() | tuple()}
   def wrap_nil_type(type) when is_atom(type) do
-    {:nil, type}
-  end
-  def wrap_nil_type(type) when is_tuple(type) do
-    {:nil, type}
+    {nil, type}
   end
 
+  def wrap_nil_type(type) when is_tuple(type) do
+    {nil, type}
+  end
 
   defp map_array_type(inner_type, constraints) do
     max_items = Keyword.get(constraints, :max_items, @default_max_list_items)
@@ -623,5 +755,4 @@ defmodule AshPhoenixGenApi.TypeMapper do
   defp map_to_list_type(_other, max_items, _inner_constraints) do
     [type: :list, max_items: max_items]
   end
-
 end

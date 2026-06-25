@@ -10,6 +10,7 @@ defmodule AshPhoenixGenApi.Resource.MfaEntityTest do
 
   defmodule MfaTestResource do
     use Ash.Resource,
+      domain: nil,
       extensions: [AshPhoenixGenApi.Resource]
 
     attributes do

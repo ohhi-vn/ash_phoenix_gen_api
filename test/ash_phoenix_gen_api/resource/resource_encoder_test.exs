@@ -9,6 +9,7 @@ defmodule AshPhoenixGenApi.Resource.ResultEncoderTest do
 
   defmodule StructDefaultResource do
     use Ash.Resource,
+      domain: nil,
       domain: AshPhoenixGenApi.Resource.ResultEncoderTest.TestDomain,
       extensions: [AshPhoenixGenApi.Resource],
       data_layer: Ash.DataLayer.Ets
@@ -41,6 +42,7 @@ defmodule AshPhoenixGenApi.Resource.ResultEncoderTest do
 
   defmodule MapDefaultResource do
     use Ash.Resource,
+      domain: nil,
       domain: AshPhoenixGenApi.Resource.ResultEncoderTest.TestDomain,
       extensions: [AshPhoenixGenApi.Resource],
       data_layer: Ash.DataLayer.Ets
@@ -73,6 +75,7 @@ defmodule AshPhoenixGenApi.Resource.ResultEncoderTest do
 
   defmodule ActionOverrideResource do
     use Ash.Resource,
+      domain: nil,
       domain: AshPhoenixGenApi.Resource.ResultEncoderTest.TestDomain,
       extensions: [AshPhoenixGenApi.Resource],
       data_layer: Ash.DataLayer.Ets

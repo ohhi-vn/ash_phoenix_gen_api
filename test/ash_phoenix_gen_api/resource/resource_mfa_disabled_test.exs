@@ -9,6 +9,7 @@ defmodule AshPhoenixGenApi.Resource.MfaDisabledTest do
 
   defmodule DisabledMfaResource do
     use Ash.Resource,
+      domain: nil,
       extensions: [AshPhoenixGenApi.Resource]
 
     attributes do

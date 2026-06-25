@@ -9,6 +9,7 @@ defmodule AshPhoenixGenApi.Domain.MfaAggregationTest do
 
   defmodule MfaAggResource do
     use Ash.Resource,
+      domain: nil,
       domain: AshPhoenixGenApi.Domain.MfaAggregationTest.MfaAggDomain,
       extensions: [AshPhoenixGenApi.Resource]
 

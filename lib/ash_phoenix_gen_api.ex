@@ -113,6 +113,7 @@ defmodule AshPhoenixGenApi do
   - `AshPhoenixGenApi.TypeMapper` — Ash type to PhoenixGenApi type mapping
   - `AshPhoenixGenApi.JsonConfig` — JSON function config list generation utilities
   - `AshPhoenixGenApi.Codec` — Result encoding for Ash resource structs
+  - `AshPhoenixGenApi.Debug` — Source annotation debugging utilities
   - `AshPhoenixGenApi.Transformers.DefineFunConfigs` — Resource transformer
   - `AshPhoenixGenApi.Transformers.DefineDomainSupporter` — Domain transformer
   - `AshPhoenixGenApi.Verifiers.VerifyActionConfigs` — Resource verifier
@@ -163,7 +164,8 @@ defmodule AshPhoenixGenApi do
       AshPhoenixGenApi.Transformers.DefineFunConfigs,
       AshPhoenixGenApi.Transformers.DefineDomainSupporter,
       AshPhoenixGenApi.Verifiers.VerifyActionConfigs,
-      AshPhoenixGenApi.Verifiers.VerifyDomainConfig
+      AshPhoenixGenApi.Verifiers.VerifyDomainConfig,
+      AshPhoenixGenApi.Debug
     ]
   end
 

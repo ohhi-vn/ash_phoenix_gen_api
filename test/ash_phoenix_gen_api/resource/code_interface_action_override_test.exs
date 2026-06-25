@@ -8,6 +8,7 @@ defmodule AshPhoenixGenApi.Resource.CodeInterfaceActionOverrideTest do
 
   defmodule CodeInterfaceActionOverrideResource do
     use Ash.Resource,
+      domain: nil,
       domain: AshPhoenixGenApi.Resource.CodeInterfaceActionOverrideTest.TestDomain,
       extensions: [AshPhoenixGenApi.Resource],
       data_layer: Ash.DataLayer.Ets

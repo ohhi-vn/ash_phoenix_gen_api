@@ -7,6 +7,7 @@ defmodule AshPhoenixGenApi.Resource.CodeInterfaceDisabledTest do
 
   defmodule CodeInterfaceDisabledResource do
     use Ash.Resource,
+      domain: nil,
       domain: AshPhoenixGenApi.Resource.CodeInterfaceDisabledTest.TestDomain,
       extensions: [AshPhoenixGenApi.Resource],
       data_layer: Ash.DataLayer.Ets

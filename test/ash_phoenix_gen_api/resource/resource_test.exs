@@ -8,6 +8,7 @@ defmodule AshPhoenixGenApi.ResourceTest do
 
   defmodule TestResource do
     use Ash.Resource,
+      domain: nil,
       extensions: [AshPhoenixGenApi.Resource]
 
     attributes do

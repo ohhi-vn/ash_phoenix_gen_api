@@ -26,3 +26,4 @@ ash_phoenix_gen_api-*.tar
 .dexter.db*
 .claude/
 .DS_Store
+mise.toml

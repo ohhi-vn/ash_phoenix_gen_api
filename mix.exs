@@ -5,7 +5,7 @@ defmodule AshPhoenixGenApi.MixProject do
   Ash extension for generating function configurations for PhoenixGenApi framework from Ash resources.
   """
 
-  @version "1.0.3"
+  @version "1.1.0"
 
   def project do
     [
@@ -16,12 +16,14 @@ defmodule AshPhoenixGenApi.MixProject do
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       elixirc_paths: elixirc_paths(Mix.env()),
+      test_elixirc_options: [debug_info: true],
       aliases: aliases(),
       docs: &docs/0,
       package: package(),
       source_url: "https://github.com/ohhi-vn/ash_phoenix_gen_api",
       homepage_url: "https://github.com/ohhi-vn/ash_phoenix_gen_api",
-      usage_rules: usage_rules()
+      usage_rules: usage_rules(),
+      consolidate_protocols: Mix.env() not in [:dev, :test]
     ]
   end
 
@@ -38,7 +40,7 @@ defmodule AshPhoenixGenApi.MixProject do
     [
       {:ash, ash_version("~> 3.27")},
       {:spark, "~> 2.7"},
-      {:phoenix_gen_api, "~> 2.18"},
+      {:phoenix_gen_api, "~> 2.20"},
       # Dev/Test
       {:igniter, "~> 0.7", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.40", only: [:dev, :test], runtime: false},
@@ -49,8 +51,8 @@ defmodule AshPhoenixGenApi.MixProject do
       {:simple_sat, "~> 0.1", only: [:dev, :test]},
       {:usage_rules, "~> 1.2", only: [:dev]},
       # Test dependencies
-      {:excoveralls, "~> 0.18", only: :test},
-      {:reactor, "~> 1.0.2"}
+      {:excoveralls, "~> 0.18", only: :test}
+      #  {:reactor, "~> 1.0.2", only: :test}
     ]
   end
 
@@ -142,10 +144,8 @@ defmodule AshPhoenixGenApi.MixProject do
     # Example for those using claude.
     [
       file: "CLAUDE.md",
-      # rules to include directly in CLAUDE.md
       # :usage_rules itself provides rules for search_docs, docs, etc.
       # use a regex to match multiple deps, or atoms/strings for specific ones
-      usage_rules: [:usage_rules, :ash, ~r/^ash_/],
       # If your CLAUDE.md is getting too big, link instead of inlining:
       usage_rules: [:ash, {~r/^ash_/, link: :markdown}],
       # or use skills

@@ -8,6 +8,7 @@ defmodule AshPhoenixGenApi.ResourceDisabledActionTest do
 
   defmodule DisabledActionResource do
     use Ash.Resource,
+      domain: nil,
       extensions: [AshPhoenixGenApi.Resource]
 
     attributes do

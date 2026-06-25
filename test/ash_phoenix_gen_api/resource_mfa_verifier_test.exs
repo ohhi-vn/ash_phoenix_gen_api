@@ -12,7 +12,8 @@ defmodule AshPhoenixGenApi.Resource.MfaVerifierTest do
       assert_raise Spark.Error.DslError, ~r/required :request_type option not found/, fn ->
         defmodule MissingRequestTypeResource do
           use Ash.Resource,
-            extensions: [AshPhoenixGenApi.Resource]
+      domain: nil,
+      extensions: [AshPhoenixGenApi.Resource]
 
           attributes do
             uuid_primary_key :id
@@ -40,7 +41,8 @@ defmodule AshPhoenixGenApi.Resource.MfaVerifierTest do
       assert_raise Spark.Error.DslError, ~r/required :mfa option not found/, fn ->
         defmodule MissingMfaTupleResource do
           use Ash.Resource,
-            extensions: [AshPhoenixGenApi.Resource]
+      domain: nil,
+      extensions: [AshPhoenixGenApi.Resource]
 
           attributes do
             uuid_primary_key :id
@@ -68,7 +70,8 @@ defmodule AshPhoenixGenApi.Resource.MfaVerifierTest do
       assert_raise Spark.Error.DslError, ~r/required :arg_types option not found/, fn ->
         defmodule MissingArgTypesResource do
           use Ash.Resource,
-            extensions: [AshPhoenixGenApi.Resource]
+      domain: nil,
+      extensions: [AshPhoenixGenApi.Resource]
 
           attributes do
             uuid_primary_key :id
