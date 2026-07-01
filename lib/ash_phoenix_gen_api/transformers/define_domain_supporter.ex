@@ -188,6 +188,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineDomainSupporter do
       if define_supporter? do
         version = extract_opt(Info.gen_api_version(dsl_state), "0.0.1")
         service = extract_opt(Info.gen_api_service(dsl_state), nil)
+        nodes = extract_opt(Info.gen_api_nodes(dsl_state), :local)
         push_nodes = extract_opt(Info.gen_api_push_nodes(dsl_state), nil)
         config_argument = extract_opt(Info.gen_api_config_argument(dsl_state), :api_gateway)
 
@@ -204,6 +205,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineDomainSupporter do
         domain_escaped = Macro.escape(domain)
         service_string_escaped = Macro.escape(service_string)
         version_string_escaped = Macro.escape(version_string)
+        nodes_escaped = Macro.escape(nodes)
         push_nodes_escaped = Macro.escape(push_nodes)
 
         config_argument_escaped = Macro.escape(config_argument)
@@ -216,6 +218,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineDomainSupporter do
               domain_escaped,
               service_string_escaped,
               version_string_escaped,
+              nodes_escaped,
               push_nodes_escaped,
               config_argument_escaped,
               supporter_module
@@ -276,6 +279,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineDomainSupporter do
          domain_escaped,
          service_string_escaped,
          version_string_escaped,
+         nodes_escaped,
          push_nodes_escaped,
          config_argument_escaped,
          supporter_module
@@ -298,7 +302,9 @@ defmodule AshPhoenixGenApi.Transformers.DefineDomainSupporter do
           generate_push_config_functions(
             service_string_escaped,
             version_string_escaped,
-            push_nodes_escaped
+            nodes_escaped,
+            push_nodes_escaped,
+            config_argument_escaped
           )
         )
       end
@@ -415,21 +421,28 @@ defmodule AshPhoenixGenApi.Transformers.DefineDomainSupporter do
   defp generate_push_config_functions(
          service_string_escaped,
          version_string_escaped,
-         push_nodes_escaped
+         nodes_escaped,
+         push_nodes_escaped,
+         config_argument_escaped
        ) do
     quote do
       @doc """
       Builds a PushConfig struct from this domain's configuration.
 
-      The `nodes` field is resolved at runtime:
-      - If `push_nodes` is an MFA tuple, it is called to get the node list
-      - If `push_nodes` is a list, it is used directly
-      - If `push_nodes` is `:local`, `[Node.self()]` is used
-      - If `push_nodes` is `nil`, the nodes field is set to `nil`
+      The `nodes` field is resolved at runtime from the service `nodes` config
+      (defined in `gen_api do nodes ... end`), telling the gateway which nodes
+      host this service. The `args` and `version_args` use the configured
+      `config_argument` (default: `:api_gateway`).
+
+      Resolution order:
+      - If `nodes` is an MFA tuple, it is called to get the node list
+      - If `nodes` is a list, it is used directly
+      - If `nodes` is `:local`, `[Node.self()]` is used
+      - If `nodes` is `nil`, the nodes field is set to `nil`
       """
       def build_push_config do
         resolved_nodes =
-          case unquote(push_nodes_escaped) do
+          case unquote(nodes_escaped) do
             nil ->
               nil
 
@@ -439,8 +452,10 @@ defmodule AshPhoenixGenApi.Transformers.DefineDomainSupporter do
             nodes when is_list(nodes) ->
               nodes
 
-            {mod, fun, args} when is_atom(mod) and is_atom(fun) and is_list(args) ->
-              apply(mod, fun, args)
+            {_mod, _fun, _args} = mfa when is_atom(_mod) and is_atom(_fun) and is_list(_args) ->
+              # Pass through MFA tuple as-is so the gateway can evaluate
+              # it at runtime to discover current service nodes.
+              mfa
 
             _ ->
               nil
@@ -453,10 +468,10 @@ defmodule AshPhoenixGenApi.Transformers.DefineDomainSupporter do
           fun_configs: fun_configs(),
           module: __MODULE__,
           function: :get_config,
-          args: [],
+          args: [unquote(config_argument_escaped)],
           version_module: __MODULE__,
           version_function: :get_config_version,
-          version_args: []
+          version_args: [unquote(config_argument_escaped)]
         })
       end
 
