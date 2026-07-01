@@ -189,6 +189,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineDomainSupporter do
         version = extract_opt(Info.gen_api_version(dsl_state), "0.0.1")
         service = extract_opt(Info.gen_api_service(dsl_state), nil)
         push_nodes = extract_opt(Info.gen_api_push_nodes(dsl_state), nil)
+        config_argument = extract_opt(Info.gen_api_config_argument(dsl_state), :api_gateway)
 
         # We use runtime resource discovery instead of compile-time enumeration
         # because resource modules may not be fully compiled when the domain
@@ -205,6 +206,8 @@ defmodule AshPhoenixGenApi.Transformers.DefineDomainSupporter do
         version_string_escaped = Macro.escape(version_string)
         push_nodes_escaped = Macro.escape(push_nodes)
 
+        config_argument_escaped = Macro.escape(config_argument)
+
         dsl_state =
           SparkTransformer.eval(
             dsl_state,
@@ -214,6 +217,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineDomainSupporter do
               service_string_escaped,
               version_string_escaped,
               push_nodes_escaped,
+              config_argument_escaped,
               supporter_module
             )
           )
@@ -273,6 +277,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineDomainSupporter do
          service_string_escaped,
          version_string_escaped,
          push_nodes_escaped,
+         config_argument_escaped,
          supporter_module
        ) do
     quote do
@@ -285,7 +290,8 @@ defmodule AshPhoenixGenApi.Transformers.DefineDomainSupporter do
 
         require Logger
 
-        unquote(generate_get_config_functions(version_string_escaped))
+        unquote(generate_get_config_functions(version_string_escaped, config_argument_escaped))
+
         unquote(generate_fun_config_functions(domain_escaped))
 
         unquote(
@@ -330,8 +336,16 @@ defmodule AshPhoenixGenApi.Transformers.DefineDomainSupporter do
     end
   end
 
-  defp generate_get_config_functions(version_string_escaped) do
+  defp generate_get_config_functions(version_string_escaped, config_argument_escaped) do
     quote do
+      @doc """
+      Support for remote pull general api config using the configured default argument.
+      Returns {:ok, list_of_fun_configs}
+      """
+      def get_config do
+        get_config(unquote(config_argument_escaped))
+      end
+
       @doc """
       Support for remote pull general api config.
       Returns {:ok, list_of_fun_configs}
@@ -339,6 +353,13 @@ defmodule AshPhoenixGenApi.Transformers.DefineDomainSupporter do
       def get_config(remote_id) do
         Logger.info("Get config from remote: #{inspect(remote_id)}")
         {:ok, fun_configs()}
+      end
+
+      @doc """
+      Support for remote pull general api config version using the configured default argument.
+      """
+      def get_config_version do
+        get_config_version(unquote(config_argument_escaped))
       end
 
       @doc """

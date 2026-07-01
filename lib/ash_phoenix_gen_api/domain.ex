@@ -374,6 +374,34 @@ defmodule AshPhoenixGenApi.Domain do
             end)
         """
       ],
+      config_argument: [
+        type: :any,
+        default: :api_gateway,
+        doc: """
+        Default argument passed to `get_config/0` and `get_config_version/0`.
+
+        When PhoenixGenApi calls the supporter module functions with no arguments
+        (as configured in `ServiceConfig` with `args: []` / `version_args: []`),
+        this value is used as the `remote_id` parameter.
+
+        The generated supporter module includes both zero-arity and one-arity versions:
+        - `get_config/0` — Calls `get_config(:api_gateway)` using this argument
+        - `get_config/1` — Takes an explicit `remote_id` (for callers that provide it)
+        - `get_config_version/0` — Calls `get_config_version(:api_gateway)`
+        - `get_config_version/1` — Takes an explicit `remote_id`
+
+        Accepts any term (atom, string, etc.).
+        Defaults to `:api_gateway`.
+
+        Example:
+
+            gen_api do
+              service "offline_game"
+              supporter_module MyApp.OfflineGame.GenApiSupporter
+              config_argument :api_gateway
+            end
+        """
+      ],
       result_encoder: [
         type: :any,
         default: :struct,

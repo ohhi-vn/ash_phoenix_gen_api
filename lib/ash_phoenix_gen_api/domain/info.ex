@@ -656,4 +656,32 @@ defmodule AshPhoenixGenApi.Domain.Info do
   def result_encoder(domain) when is_atom(domain) do
     extract_spark_opt(gen_api_result_encoder(domain), :struct)
   end
+
+  @doc """
+  Gets the default config_argument for this domain.
+
+  The `config_argument` is the value passed as `remote_id` to `get_config/0`
+  and `get_config_version/0` when they are called without arguments.
+
+  Defaults to `:api_gateway`.
+
+  ## Parameters
+
+    - `domain` - The Ash domain module
+
+  ## Examples
+
+      iex> AshPhoenixGenApi.Domain.Info.config_argument(MyApp.Chat)
+      :api_gateway
+  """
+  @spec config_argument(module()) :: term()
+  def config_argument(domain) when is_atom(domain) do
+    if has_gen_api?(domain) do
+      extract_spark_opt(gen_api_config_argument(domain), :api_gateway)
+    else
+      :api_gateway
+    end
+  rescue
+    _ -> :api_gateway
+  end
 end

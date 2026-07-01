@@ -1,5 +1,3 @@
-
-
 defmodule AshPhoenixGenApi.DomainTest do
   use ExUnit.Case
 
@@ -7,13 +5,12 @@ defmodule AshPhoenixGenApi.DomainTest do
 
   @moduletag timeout: 60_000
 
-
   defmodule TestDomain do
     use Ash.Domain,
       extensions: [AshPhoenixGenApi.Domain]
 
     resources do
-      resource AshPhoenixGenApi.ResourceTest.TestResource
+      resource(AshPhoenixGenApi.ResourceTest.TestResource)
     end
 
     gen_api do
@@ -60,7 +57,8 @@ defmodule AshPhoenixGenApi.DomainTest do
     end
 
     test "gen_api_nodes returns configured nodes" do
-      assert AshPhoenixGenApi.Domain.Info.gen_api_nodes!(TestDomain) == {TestCluster, :get_nodes, [:chat]}
+      assert AshPhoenixGenApi.Domain.Info.gen_api_nodes!(TestDomain) ==
+               {TestCluster, :get_nodes, [:chat]}
     end
 
     test "gen_api_timeout returns configured timeout" do
@@ -78,6 +76,40 @@ defmodule AshPhoenixGenApi.DomainTest do
 
     test "gen_api_define_supporter? returns true by default" do
       assert AshPhoenixGenApi.Domain.Info.gen_api_define_supporter?(TestDomain) == true
+    end
+
+    test "gen_api_config_argument returns default :api_gateway" do
+      assert AshPhoenixGenApi.Domain.Info.config_argument(TestDomain) == :api_gateway
+    end
+
+    test "domain compiles with custom config_argument" do
+      refute_dsl_errors do
+        defmodule Elixir.ConfigArgumentTestDomain do
+          use Ash.Domain,
+            extensions: [AshPhoenixGenApi.Domain]
+
+          gen_api do
+            service "offline_game"
+            supporter_module Elixir.ConfigArgumentTestDomain.GenApiSupporter
+            version "0.0.1"
+            config_argument(:custom_node)
+          end
+
+          resources do
+          end
+        end
+      end
+
+      assert AshPhoenixGenApi.Domain.Info.gen_api_config_argument!(
+               Elixir.ConfigArgumentTestDomain
+             ) == :custom_node
+
+      # Verify zero-arity functions use the custom config_argument
+      supporter = Elixir.ConfigArgumentTestDomain.GenApiSupporter
+      assert function_exported?(supporter, :get_config, 0)
+      assert function_exported?(supporter, :get_config_version, 0)
+      {:ok, version} = supporter.get_config_version()
+      assert version == "0.0.1"
     end
   end
 
@@ -154,34 +186,53 @@ defmodule AshPhoenixGenApi.DomainTest do
   describe "supporter module" do
     test "supporter module is generated" do
       supporter = AshPhoenixGenApi.DomainTest.TestDomain.GenApiSupporter
+      assert function_exported?(supporter, :get_config, 0)
       assert function_exported?(supporter, :get_config, 1)
+      assert function_exported?(supporter, :get_config_version, 0)
       assert function_exported?(supporter, :get_config_version, 1)
       assert function_exported?(supporter, :fun_configs, 0)
       assert function_exported?(supporter, :list_request_types, 0)
       assert function_exported?(supporter, :get_fun_config, 1)
     end
 
-    test "get_config returns {:ok, fun_configs}" do
-      {:ok, configs} = AshPhoenixGenApi.DomainTest.TestDomain.GenApiSupporter.get_config("test_remote")
+    test "get_config/0 uses default config_argument (:api_gateway)" do
+      {:ok, configs} = AshPhoenixGenApi.DomainTest.TestDomain.GenApiSupporter.get_config()
       assert is_list(configs)
     end
 
-    test "get_config_version returns {:ok, version}" do
-      {:ok, version} = AshPhoenixGenApi.DomainTest.TestDomain.GenApiSupporter.get_config_version("test_remote")
+    test "get_config/1 returns {:ok, fun_configs}" do
+      {:ok, configs} =
+        AshPhoenixGenApi.DomainTest.TestDomain.GenApiSupporter.get_config("test_remote")
+
+      assert is_list(configs)
+    end
+
+    test "get_config_version/0 uses default config_argument (:api_gateway)" do
+      {:ok, version} = AshPhoenixGenApi.DomainTest.TestDomain.GenApiSupporter.get_config_version()
+      assert version == "0.0.1"
+    end
+
+    test "get_config_version/1 returns {:ok, version}" do
+      {:ok, version} =
+        AshPhoenixGenApi.DomainTest.TestDomain.GenApiSupporter.get_config_version("test_remote")
+
       assert version == "0.0.1"
     end
 
     test "resource fun_configs function is available" do
       # Debug: check if the resource's fun_configs function exists and returns data
       resource = AshPhoenixGenApi.ResourceTest.TestResource
+
       assert function_exported?(resource, :__ash_phoenix_gen_api_fun_configs__, 0),
-        "Resource #{inspect(resource)} does not export __ash_phoenix_gen_api_fun_configs__/0"
+             "Resource #{inspect(resource)} does not export __ash_phoenix_gen_api_fun_configs__/0"
 
       resource_configs = resource.__ash_phoenix_gen_api_fun_configs__()
+
       assert is_list(resource_configs),
-        "Resource fun_configs returned non-list: #{inspect(resource_configs)}"
+             "Resource fun_configs returned non-list: #{inspect(resource_configs)}"
+
       assert length(resource_configs) > 0,
-        "Resource fun_configs returned empty list. Available functions: #{inspect(resource.__info__(:functions) |> Enum.filter(fn {name, _} -> String.contains?(to_string(name), "gen_api") end))}"
+             "Resource fun_configs returned empty list. Available functions: #{inspect(resource.__info__(:functions) |> Enum.filter(fn {name, _} -> String.contains?(to_string(name), "gen_api") end))}"
     end
 
     test "fun_configs returns list of FunConfig structs" do
@@ -207,7 +258,11 @@ defmodule AshPhoenixGenApi.DomainTest do
       if length(configs) == 0 do
         # Try to diagnose: is the resource even in the domain's resource list?
         domain_resources = Ash.Domain.Info.resources(AshPhoenixGenApi.DomainTest.TestDomain)
-        resources_with_gen_api = AshPhoenixGenApi.Domain.Info.resources_with_gen_api(AshPhoenixGenApi.DomainTest.TestDomain)
+
+        resources_with_gen_api =
+          AshPhoenixGenApi.Domain.Info.resources_with_gen_api(
+            AshPhoenixGenApi.DomainTest.TestDomain
+          )
 
         flunk(
           "Supporter fun_configs is empty. " <>
