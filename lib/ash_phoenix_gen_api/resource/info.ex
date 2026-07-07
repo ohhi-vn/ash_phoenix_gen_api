@@ -611,4 +611,70 @@ defmodule AshPhoenixGenApi.Resource.Info do
       config -> ActionConfig.effective_result_encoder(config, section_default)
     end
   end
+
+  @doc """
+  Gets the effective before_execute hook for a specific action, resolving all defaults.
+
+  ## Parameters
+
+    - `resource` - The Ash resource module
+    - `action_name` - The action name atom
+  """
+  @spec effective_before_execute(module(), atom()) :: ActionConfig.hook_config()
+  def effective_before_execute(resource, action_name)
+      when is_atom(resource) and is_atom(action_name) do
+    section_default =
+      AshPhoenixGenApi.extract_spark_opt(gen_api_before_execute(resource), nil)
+
+    action_config = action(resource, action_name)
+
+    case action_config do
+      nil -> section_default
+      config -> ActionConfig.effective_before_execute(config, section_default)
+    end
+  end
+
+  @doc """
+  Gets the effective after_execute hook for a specific action, resolving all defaults.
+
+  ## Parameters
+
+    - `resource` - The Ash resource module
+    - `action_name` - The action name atom
+  """
+  @spec effective_after_execute(module(), atom()) :: ActionConfig.hook_config()
+  def effective_after_execute(resource, action_name)
+      when is_atom(resource) and is_atom(action_name) do
+    section_default =
+      AshPhoenixGenApi.extract_spark_opt(gen_api_after_execute(resource), nil)
+
+    action_config = action(resource, action_name)
+
+    case action_config do
+      nil -> section_default
+      config -> ActionConfig.effective_after_execute(config, section_default)
+    end
+  end
+
+  @doc """
+  Gets the effective hook_timeout for a specific action, resolving all defaults.
+
+  ## Parameters
+
+    - `resource` - The Ash resource module
+    - `action_name` - The action name atom
+  """
+  @spec effective_hook_timeout(module(), atom()) :: pos_integer()
+  def effective_hook_timeout(resource, action_name)
+      when is_atom(resource) and is_atom(action_name) do
+    section_default =
+      AshPhoenixGenApi.extract_spark_opt(gen_api_hook_timeout(resource), 5_000)
+
+    action_config = action(resource, action_name)
+
+    case action_config do
+      nil -> section_default
+      config -> ActionConfig.effective_hook_timeout(config, section_default)
+    end
+  end
 end

@@ -431,6 +431,42 @@ defmodule AshPhoenixGenApi.Domain do
 
         Defaults to `:struct`.
         """
+      ],
+      before_execute: [
+        type: :any,
+        default: nil,
+        doc: """
+        Default before_execute hook MFA for all resources in this domain.
+
+        Accepts `{Module, :function}` or `{Module, :function, extra_args}`.
+        The hook receives `(request, fun_config)` and must return
+        `{:ok, request, fun_config}` to proceed, or `{:error, reason}` to abort.
+
+        Individual resources and actions can override this.
+        """
+      ],
+      after_execute: [
+        type: :any,
+        default: nil,
+        doc: """
+        Default after_execute hook MFA for all resources in this domain.
+
+        Accepts `{Module, :function}` or `{Module, :function, extra_args}`.
+        The hook receives `(request, fun_config, result)` and must return
+        the (possibly modified) result.
+
+        Individual resources and actions can override this.
+        """
+      ],
+      hook_timeout: [
+        type: :any,
+        default: 5_000,
+        doc: """
+        Default per-hook timeout in milliseconds for all resources in this domain.
+        Must be a positive integer.
+
+        Individual resources and actions can override this.
+        """
       ]
     ]
   }

@@ -50,33 +50,28 @@ defmodule AshPhoenixGenApi.Resource.EffectiveField do
 
   defp build_effective_functions(module) do
     fields = [
-      {:timeout,
-       quote(do: pos_integer() | :infinity),
-       timeout_doc(module)},
-      {:response_type,
-       quote(do: :sync | :async | :stream | :none),
+      {:timeout, quote(do: pos_integer() | :infinity), timeout_doc(module)},
+      {:response_type, quote(do: :sync | :async | :stream | :none),
        "Resolves the effective response type, falling back to the provided default."},
-      {:request_info,
-       quote(do: boolean()),
+      {:request_info, quote(do: boolean()),
        "Resolves the effective request_info, falling back to the provided default."},
-      {:check_permission,
-       quote(do: permission_mode()),
+      {:check_permission, quote(do: permission_mode()),
        "Resolves the effective check_permission, falling back to the provided default."},
-      {:permission_callback,
-       quote(do: permission_callback()),
-       permission_callback_doc(module)},
-      {:choose_node_mode,
-       quote(do: choose_node_mode()),
+      {:permission_callback, quote(do: permission_callback()), permission_callback_doc(module)},
+      {:choose_node_mode, quote(do: choose_node_mode()),
        "Resolves the effective choose_node_mode, falling back to the provided default."},
-      {:nodes,
-       quote(do: node_config()),
+      {:nodes, quote(do: node_config()),
        "Resolves the effective nodes, falling back to the provided default."},
-      {:retry,
-       quote(do: retry_config()),
+      {:retry, quote(do: retry_config()),
        "Resolves the effective retry, falling back to the provided default."},
-      {:version,
-       quote(do: String.t()),
-       "Resolves the effective version, falling back to the provided default."}
+      {:version, quote(do: String.t()),
+       "Resolves the effective version, falling back to the provided default."},
+      {:before_execute, quote(do: hook_config()),
+       "Resolves the effective before_execute hook, falling back to the provided default."},
+      {:after_execute, quote(do: hook_config()),
+       "Resolves the effective after_execute hook, falling back to the provided default."},
+      {:hook_timeout, quote(do: pos_integer()),
+       "Resolves the effective hook_timeout, falling back to the provided default."}
     ]
 
     Enum.map(fields, fn {field, spec_type, doc} ->
@@ -140,7 +135,10 @@ defmodule AshPhoenixGenApi.Resource.EffectiveField do
       """
       @spec has_explicit_arg_types?(t()) :: boolean()
       def has_explicit_arg_types?(%__MODULE__{arg_types: nil}), do: false
-      def has_explicit_arg_types?(%__MODULE__{arg_types: arg_types}) when map_size(arg_types) == 0, do: false
+
+      def has_explicit_arg_types?(%__MODULE__{arg_types: arg_types})
+          when map_size(arg_types) == 0, do: false
+
       def has_explicit_arg_types?(%__MODULE__{arg_types: _}), do: true
 
       @doc """

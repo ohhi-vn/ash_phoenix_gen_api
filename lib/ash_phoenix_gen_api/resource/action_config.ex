@@ -47,6 +47,7 @@ defmodule AshPhoenixGenApi.Resource.ActionConfig do
   @type choose_node_mode :: SharedTypes.choose_node_mode()
   @type retry_config :: SharedTypes.retry_config()
   @type gen_api_type :: SharedTypes.gen_api_type()
+  @type hook_config :: SharedTypes.hook_config()
   @type result_encoder :: SharedTypes.result_encoder()
 
   @doc """
@@ -87,6 +88,9 @@ defmodule AshPhoenixGenApi.Resource.ActionConfig do
           arg_orders: [String.t()] | :map,
           disabled: boolean(),
           code_interface?: boolean() | nil,
+          before_execute: hook_config(),
+          after_execute: hook_config(),
+          hook_timeout: pos_integer() | nil,
           result_encoder: result_encoder(),
           __spark_metadata__: any()
         }
@@ -108,6 +112,9 @@ defmodule AshPhoenixGenApi.Resource.ActionConfig do
     arg_orders: :map,
     disabled: false,
     code_interface?: nil,
+    before_execute: nil,
+    after_execute: nil,
+    hook_timeout: nil,
     result_encoder: nil,
     __spark_metadata__: nil
   ]
@@ -175,7 +182,9 @@ defmodule AshPhoenixGenApi.Resource.ActionConfig do
   """
   @spec effective_code_interface?(t(), boolean()) :: boolean()
   def effective_code_interface?(%__MODULE__{code_interface?: nil}, default), do: default
-  def effective_code_interface?(%__MODULE__{code_interface?: code_interface?}, _default), do: code_interface?
+
+  def effective_code_interface?(%__MODULE__{code_interface?: code_interface?}, _default),
+    do: code_interface?
 
   @doc """
   Resolves the effective result_encoder setting, falling back to the provided default.
@@ -210,5 +219,7 @@ defmodule AshPhoenixGenApi.Resource.ActionConfig do
   """
   @spec effective_result_encoder(t(), result_encoder()) :: result_encoder()
   def effective_result_encoder(%__MODULE__{result_encoder: nil}, default), do: default
-  def effective_result_encoder(%__MODULE__{result_encoder: result_encoder}, _default), do: result_encoder
+
+  def effective_result_encoder(%__MODULE__{result_encoder: result_encoder}, _default),
+    do: result_encoder
 end

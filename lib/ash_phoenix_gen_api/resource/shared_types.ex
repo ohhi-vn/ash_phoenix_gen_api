@@ -45,6 +45,8 @@ defmodule AshPhoenixGenApi.Resource.SharedTypes do
           | {:list_string, pos_integer(), pos_integer()}
           | {:list_num, pos_integer()}
 
+  @type hook_config :: {module(), atom()} | {module(), atom(), [any()]} | nil
+
   @type result_encoder ::
           :struct
           | :map

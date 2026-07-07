@@ -329,6 +329,40 @@ defmodule AshPhoenixGenApi.Resource do
 
         Defaults to the `gen_api` section-level `result_encoder` (which defaults to `:struct`).
         """
+      ],
+      before_execute: [
+        type: :any,
+        default: nil,
+        doc: """
+        A hook MFA tuple called before the action is executed.
+
+        Accepts `{Module, :function}` or `{Module, :function, extra_args}`.
+        The hook receives `(request, fun_config)` and must return
+        `{:ok, request, fun_config}` to proceed, or `{:error, reason}` to abort.
+
+        When `nil`, inherits from the section-level `before_execute`.
+        """
+      ],
+      after_execute: [
+        type: :any,
+        default: nil,
+        doc: """
+        A hook MFA tuple called after the action is executed.
+
+        Accepts `{Module, :function}` or `{Module, :function, extra_args}`.
+        The hook receives `(request, fun_config, result)` and must return
+        the (possibly modified) result.
+
+        When `nil`, inherits from the section-level `after_execute`.
+        """
+      ],
+      hook_timeout: [
+        type: :any,
+        default: nil,
+        doc: """
+        Per-hook timeout in milliseconds. Must be a positive integer.
+        Defaults to the section-level `hook_timeout` (which defaults to `5000`).
+        """
       ]
     ]
   }
@@ -551,6 +585,40 @@ defmodule AshPhoenixGenApi.Resource do
         the generated FunConfig list. Useful for temporarily disabling an
         endpoint without removing its configuration.
         """
+      ],
+      before_execute: [
+        type: :any,
+        default: nil,
+        doc: """
+        A hook MFA tuple called before the MFA is executed.
+
+        Accepts `{Module, :function}` or `{Module, :function, extra_args}`.
+        The hook receives `(request, fun_config)` and must return
+        `{:ok, request, fun_config}` to proceed, or `{:error, reason}` to abort.
+
+        When `nil`, inherits from the section-level `before_execute`.
+        """
+      ],
+      after_execute: [
+        type: :any,
+        default: nil,
+        doc: """
+        A hook MFA tuple called after the MFA is executed.
+
+        Accepts `{Module, :function}` or `{Module, :function, extra_args}`.
+        The hook receives `(request, fun_config, result)` and must return
+        the (possibly modified) result.
+
+        When `nil`, inherits from the section-level `after_execute`.
+        """
+      ],
+      hook_timeout: [
+        type: :any,
+        default: nil,
+        doc: """
+        Per-hook timeout in milliseconds. Must be a positive integer.
+        Defaults to the section-level `hook_timeout` (which defaults to `5000`).
+        """
       ]
     ]
   }
@@ -771,6 +839,42 @@ defmodule AshPhoenixGenApi.Resource do
         the encoded value.
 
         Defaults to `:struct`.
+        """
+      ],
+      before_execute: [
+        type: :any,
+        default: nil,
+        doc: """
+        Default before_execute hook MFA for all actions and MFA endpoints.
+
+        Accepts `{Module, :function}` or `{Module, :function, extra_args}`.
+        The hook receives `(request, fun_config)` and must return
+        `{:ok, request, fun_config}` to proceed, or `{:error, reason}` to abort.
+
+        Individual actions and MFA endpoints can override this.
+        """
+      ],
+      after_execute: [
+        type: :any,
+        default: nil,
+        doc: """
+        Default after_execute hook MFA for all actions and MFA endpoints.
+
+        Accepts `{Module, :function}` or `{Module, :function, extra_args}`.
+        The hook receives `(request, fun_config, result)` and must return
+        the (possibly modified) result.
+
+        Individual actions and MFA endpoints can override this.
+        """
+      ],
+      hook_timeout: [
+        type: :any,
+        default: 5_000,
+        doc: """
+        Default per-hook timeout in milliseconds for all actions and MFA endpoints.
+        Must be a positive integer.
+
+        Individual actions and MFA endpoints can override this.
         """
       ]
     ]

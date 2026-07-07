@@ -259,6 +259,9 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
       permission_callback: extract_opt(Info.gen_api_permission_callback(dsl_state), nil),
       version: extract_opt(Info.gen_api_version(dsl_state), "0.0.1"),
       retry: extract_opt(Info.gen_api_retry(dsl_state), nil),
+      before_execute: extract_opt(Info.gen_api_before_execute(dsl_state), nil),
+      after_execute: extract_opt(Info.gen_api_after_execute(dsl_state), nil),
+      hook_timeout: extract_opt(Info.gen_api_hook_timeout(dsl_state), 5_000),
       result_encoder: extract_opt(Info.gen_api_result_encoder(dsl_state), :struct)
     }
   end
@@ -302,6 +305,15 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
 
     {arg_types, arg_orders} = resolve_arg_config(action_config, resource, dsl_state)
 
+    before_execute =
+      ActionConfig.effective_before_execute(action_config, section_defaults.before_execute)
+
+    after_execute =
+      ActionConfig.effective_after_execute(action_config, section_defaults.after_execute)
+
+    hook_timeout =
+      ActionConfig.effective_hook_timeout(action_config, section_defaults.hook_timeout)
+
     %PhoenixGenApi.Structs.FunConfig{
       request_type: request_type,
       service: section_defaults.service,
@@ -317,7 +329,10 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
       request_info: request_info,
       version: version,
       disabled: action_config.disabled,
-      retry: retry
+      retry: retry,
+      before_execute: before_execute,
+      after_execute: after_execute,
+      hook_timeout: hook_timeout
     }
   end
 
@@ -381,7 +396,13 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
       request_info: request_info,
       version: version,
       disabled: mfa_config.disabled,
-      retry: retry
+      retry: retry,
+      before_execute:
+        MfaConfig.effective_before_execute(mfa_config, section_defaults.before_execute),
+      after_execute:
+        MfaConfig.effective_after_execute(mfa_config, section_defaults.after_execute),
+      hook_timeout:
+        MfaConfig.effective_hook_timeout(mfa_config, section_defaults.hook_timeout)
     }
   end
 

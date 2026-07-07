@@ -50,6 +50,7 @@ defmodule AshPhoenixGenApi.Resource.MfaConfig do
   @type choose_node_mode :: SharedTypes.choose_node_mode()
   @type retry_config :: SharedTypes.retry_config()
   @type gen_api_type :: SharedTypes.gen_api_type()
+  @type hook_config :: SharedTypes.hook_config()
 
   @doc """
   Callback function signature for permission checking.
@@ -78,6 +79,9 @@ defmodule AshPhoenixGenApi.Resource.MfaConfig do
           retry: retry_config() | nil,
           version: String.t() | nil,
           disabled: boolean(),
+          before_execute: hook_config(),
+          after_execute: hook_config(),
+          hook_timeout: pos_integer() | nil,
           __spark_metadata__: any()
         }
 
@@ -97,6 +101,9 @@ defmodule AshPhoenixGenApi.Resource.MfaConfig do
     :version,
     arg_orders: :map,
     disabled: false,
+    before_execute: nil,
+    after_execute: nil,
+    hook_timeout: nil,
     __spark_metadata__: nil
   ]
 

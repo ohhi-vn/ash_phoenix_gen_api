@@ -574,6 +574,140 @@ end
 
 Disabled actions are excluded from the generated FunConfig list.
 
+## Hooks (before_execute / after_execute)
+
+You can configure hooks that run before and/or after each API call. Hooks are
+specified as MFA tuples and can be set at the section level (applying to all
+actions and MFA endpoints) or overridden per action/MFA entity.
+
+### Hook Signatures
+
+**Before hook** — receives `(request, fun_config)` and must return:
+- `{:ok, request, fun_config}` — proceed with (possibly modified) request/config
+- `{:error, reason}` — abort execution
+
+**After hook** — receives `(request, fun_config, result)` and must return
+the (possibly modified) result.
+
+Hooks accept either `{Module, :function}` or `{Module, :function, extra_args}`.
+Extra args are appended after the standard hook arguments.
+
+### Section-Level Hooks
+
+Set hooks at the `gen_api` section level to apply to all endpoints:
+
+```elixir
+gen_api do
+  service "chat"
+  before_execute {MyApp.Hooks, :log_request}
+  after_execute {MyApp.Hooks, :track_metrics, [:chat]}
+  hook_timeout 10_000
+
+  action :create do
+    request_type "send_direct_message"
+  end
+
+  action :read do
+    request_type "get_messages"
+  end
+end
+```
+
+### Action-Level Hook Overrides
+
+Override hooks per action:
+
+```elixir
+gen_api do
+  service "chat"
+  before_execute {MyApp.Hooks, :log_request}
+  hook_timeout 5_000
+
+  action :create do
+    request_type "send_direct_message"
+    before_execute {MyApp.Hooks, :validate_content}
+    hook_timeout 15_000
+  end
+
+  action :read do
+    request_type "get_messages"
+    # Inherits section-level before_execute and hook_timeout
+  end
+end
+```
+
+### MFA Entity Hooks
+
+Hooks also work with standalone MFA endpoints:
+
+```elixir
+gen_api do
+  service "chat"
+  after_execute {MyApp.Hooks, :track_metrics}
+
+  mfa :ping do
+    request_type "ping"
+    mfa {MyApp.Chat.Api, :ping, []}
+    arg_types %{}
+    before_execute {MyApp.Hooks, :check_health}
+    hook_timeout 3_000
+  end
+end
+```
+
+### Hook Timeout
+
+The `hook_timeout` option (default: `5000` ms) controls the maximum time each
+hook is allowed to run. Set it to a positive integer at the section, action,
+or MFA entity level.
+
+### Hook Failure Behavior
+
+- If a `before_execute` hook returns `{:error, reason}`, the request is aborted
+  and an error response is returned to the client.
+- If an `after_execute` hook fails (raises or times out), the original result
+  is preserved and the hook failure is silently ignored.
+
+### Example Hook Module
+
+```elixir
+defmodule MyApp.Hooks do
+  require Logger
+
+  def log_request(request, fun_config) do
+    Logger.info("API call: #{fun_config.request_type} by user #{request.user_id}")
+    {:ok, request, fun_config}
+  end
+
+  def validate_content(request, fun_config) do
+    if byte_size(request.args["content"] || "") > 0 do
+      {:ok, request, fun_config}
+    else
+      {:error, "content is required"}
+    end
+  end
+
+  def track_metrics(request, fun_config, result, service_name) do
+    # Record metrics for the service
+    :telemetry.execute([:my_app, :api_call], %{duration: 100}, %{
+      service: service_name,
+      request_type: fun_config.request_type
+    })
+    result
+  end
+
+  def check_health(request, fun_config) do
+    if MyApp.Health.ok?() do
+      {:ok, request, fun_config}
+    else
+      {:error, "service unhealthy"}
+    end
+  end
+end
+```
+
+## Disabling an Action (continued)
+
 ## Compile-Time Verification
 
 The extension performs compile-time verification to catch configuration errors early:
