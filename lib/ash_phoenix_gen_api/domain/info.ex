@@ -106,8 +106,6 @@ defmodule AshPhoenixGenApi.Domain.Info do
     else
       nil
     end
-  rescue
-    _ -> nil
   end
 
   @doc """
@@ -132,8 +130,6 @@ defmodule AshPhoenixGenApi.Domain.Info do
     else
       nil
     end
-  rescue
-    _ -> nil
   end
 
   @doc """
@@ -266,8 +262,6 @@ defmodule AshPhoenixGenApi.Domain.Info do
     else
       "0.0.1"
     end
-  rescue
-    _ -> "0.0.1"
   end
 
   @doc """
@@ -292,8 +286,6 @@ defmodule AshPhoenixGenApi.Domain.Info do
     else
       false
     end
-  rescue
-    _ -> false
   end
 
   @doc """
@@ -318,8 +310,6 @@ defmodule AshPhoenixGenApi.Domain.Info do
     else
       5_000
     end
-  rescue
-    _ -> 5_000
   end
 
   @doc """
@@ -344,8 +334,6 @@ defmodule AshPhoenixGenApi.Domain.Info do
     else
       :async
     end
-  rescue
-    _ -> :async
   end
 
   @doc """
@@ -370,8 +358,6 @@ defmodule AshPhoenixGenApi.Domain.Info do
     else
       true
     end
-  rescue
-    _ -> true
   end
 
   @doc """
@@ -396,8 +382,6 @@ defmodule AshPhoenixGenApi.Domain.Info do
     else
       :local
     end
-  rescue
-    _ -> :local
   end
 
   @doc """
@@ -422,8 +406,6 @@ defmodule AshPhoenixGenApi.Domain.Info do
     else
       :random
     end
-  rescue
-    _ -> :random
   end
 
   @doc """
@@ -449,8 +431,6 @@ defmodule AshPhoenixGenApi.Domain.Info do
     else
       false
     end
-  rescue
-    _ -> false
   end
 
   @doc """
@@ -484,8 +464,6 @@ defmodule AshPhoenixGenApi.Domain.Info do
     else
       nil
     end
-  rescue
-    _ -> nil
   end
 
   @doc """
@@ -514,8 +492,6 @@ defmodule AshPhoenixGenApi.Domain.Info do
     else
       nil
     end
-  rescue
-    _ -> nil
   end
 
   @doc """
@@ -548,8 +524,6 @@ defmodule AshPhoenixGenApi.Domain.Info do
     else
       nil
     end
-  rescue
-    _ -> nil
   end
 
   @doc """
@@ -574,8 +548,6 @@ defmodule AshPhoenixGenApi.Domain.Info do
     else
       false
     end
-  rescue
-    _ -> false
   end
 
   @doc """
@@ -681,7 +653,5 @@ defmodule AshPhoenixGenApi.Domain.Info do
     else
       :api_gateway
     end
-  rescue
-    _ -> :api_gateway
   end
 end

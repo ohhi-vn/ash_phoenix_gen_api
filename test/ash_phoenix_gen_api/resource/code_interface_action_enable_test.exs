@@ -1,9 +1,7 @@
-
 defmodule AshPhoenixGenApi.Resource.CodeInterfaceActionEnableTest do
   use ExUnit.Case
 
   @moduletag timeout: 60_000
-
 
   defmodule CodeInterfaceActionEnableResource do
     use Ash.Resource,

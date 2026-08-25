@@ -17,8 +17,10 @@ defmodule AshPhoenixGenApi.Debug do
   They are not available in production or `.exs` scripts unless explicitly enabled.
   """
 
-  alias AshPhoenixGenApi.Resource.Info, as: ResourceInfo
   alias AshPhoenixGenApi.Domain.Info, as: DomainInfo
+  alias AshPhoenixGenApi.Resource.Info, as: ResourceInfo
+  alias Spark.Dsl.Entity
+  alias Spark.Dsl.Extension
 
   @doc """
   Inspects source locations for a resource's `gen_api` DSL section.
@@ -29,9 +31,9 @@ defmodule AshPhoenixGenApi.Debug do
   def inspect_resource_sources(resource) do
     if ResourceInfo.has_gen_api?(resource) do
       dsl_state = resource.spark_dsl_config()
-      section_anno = Spark.Dsl.Extension.get_section_anno(dsl_state, [:gen_api])
+      section_anno = Extension.get_section_anno(dsl_state, [:gen_api])
 
-      entities = Spark.Dsl.Extension.get_entities(dsl_state, [:gen_api])
+      entities = Extension.get_entities(dsl_state, [:gen_api])
 
       %{
         section: format_anno(section_anno),
@@ -52,9 +54,9 @@ defmodule AshPhoenixGenApi.Debug do
   def inspect_domain_sources(domain) do
     if DomainInfo.has_gen_api?(domain) do
       dsl_state = domain.spark_dsl_config()
-      section_anno = Spark.Dsl.Extension.get_section_anno(dsl_state, [:gen_api])
+      section_anno = Extension.get_section_anno(dsl_state, [:gen_api])
 
-      entities = Spark.Dsl.Extension.get_entities(dsl_state, [:gen_api])
+      entities = Extension.get_entities(dsl_state, [:gen_api])
 
       %{
         section: format_anno(section_anno),
@@ -109,20 +111,19 @@ defmodule AshPhoenixGenApi.Debug do
   # ---------------------------------------------------------------------------
 
   defp format_entity_anno(entity) do
-    anno = Spark.Dsl.Entity.anno(entity)
+    anno = Entity.anno(entity)
     %{name: entity.name, location: format_anno(anno)}
   end
 
   defp format_anno(nil), do: nil
 
-  defp format_anno(anno) when is_tuple(anno) do
-    line = :erl_anno.location(anno)
-    file = :erl_anno.file(anno)
+  # Spark stores several anno shapes depending on where the entity was
+  # captured; dialyzer's opaque :erl_anno type cannot express that union.
+  @dialyzer {:nowarn_function, format_anno: 1}
 
-    case file do
-      :undefined -> "line #{line}"
-      charlist -> "#{Path.relative_to_cwd(to_string(charlist))}:#{line}"
-    end
+  # A bare location tuple carries no file information.
+  defp format_anno({line, _column} = location) when is_integer(line) do
+    "line #{inspect(location)}"
   end
 
   defp format_anno(anno) when is_list(anno) do

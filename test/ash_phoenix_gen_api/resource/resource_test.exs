@@ -1,10 +1,7 @@
-
-
 defmodule AshPhoenixGenApi.ResourceTest do
   use ExUnit.Case
 
   @moduletag timeout: 60_000
-
 
   defmodule TestResource do
     use Ash.Resource,

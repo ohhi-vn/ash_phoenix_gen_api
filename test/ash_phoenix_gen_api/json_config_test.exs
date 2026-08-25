@@ -4,6 +4,7 @@ defmodule AshPhoenixGenApi.JsonConfigTest do
   @moduletag timeout: 60_000
 
   alias AshPhoenixGenApi.JsonConfig
+  alias AshPhoenixGenApi.Resource.Info
 
   # ---------------------------------------------------------------------------
   # Test Resources & Domain
@@ -149,9 +150,7 @@ defmodule AshPhoenixGenApi.JsonConfigTest do
   defmodule CustomEncoder do
     @moduledoc false
     def encode(fun_configs, _extra_arg) do
-      fun_configs
-      |> Enum.map(& &1.request_type)
-      |> Enum.join(",")
+      Enum.map_join(fun_configs, ",", & &1.request_type)
     end
   end
 
@@ -365,7 +364,7 @@ defmodule AshPhoenixGenApi.JsonConfigTest do
 
   describe "to_map/2" do
     test "converts FunConfig list to map" do
-      fun_configs = AshPhoenixGenApi.Resource.Info.fun_configs(ChatMessage)
+      fun_configs = Info.fun_configs(ChatMessage)
       result = JsonConfig.to_map(fun_configs)
 
       assert is_map(result)
@@ -375,7 +374,7 @@ defmodule AshPhoenixGenApi.JsonConfigTest do
     end
 
     test "converts with descriptions" do
-      fun_configs = AshPhoenixGenApi.Resource.Info.fun_configs(ChatMessage)
+      fun_configs = Info.fun_configs(ChatMessage)
 
       result =
         JsonConfig.to_map(fun_configs,
@@ -399,7 +398,7 @@ defmodule AshPhoenixGenApi.JsonConfigTest do
 
   describe "to_json/2" do
     test "converts FunConfig list to JSON string" do
-      fun_configs = AshPhoenixGenApi.Resource.Info.fun_configs(ChatMessage)
+      fun_configs = Info.fun_configs(ChatMessage)
       result = JsonConfig.to_json(fun_configs)
 
       assert is_binary(result)
@@ -415,7 +414,7 @@ defmodule AshPhoenixGenApi.JsonConfigTest do
   describe "fun_config_to_entry/2" do
     test "returns key-value tuple" do
       fun_config =
-        AshPhoenixGenApi.Resource.Info.fun_config(ChatMessage, "send_direct_message")
+        Info.fun_config(ChatMessage, "send_direct_message")
 
       {key, value} = JsonConfig.fun_config_to_entry(fun_config)
 
@@ -426,7 +425,7 @@ defmodule AshPhoenixGenApi.JsonConfigTest do
 
     test "includes description in key when provided" do
       fun_config =
-        AshPhoenixGenApi.Resource.Info.fun_config(ChatMessage, "send_direct_message")
+        Info.fun_config(ChatMessage, "send_direct_message")
 
       {key, _value} =
         JsonConfig.fun_config_to_entry(fun_config,
@@ -438,7 +437,7 @@ defmodule AshPhoenixGenApi.JsonConfigTest do
 
     test "entry data has correct structure" do
       fun_config =
-        AshPhoenixGenApi.Resource.Info.fun_config(ChatMessage, "send_direct_message")
+        Info.fun_config(ChatMessage, "send_direct_message")
 
       {_key, value} = JsonConfig.fun_config_to_entry(fun_config)
 
@@ -798,9 +797,22 @@ defmodule AshPhoenixGenApi.JsonConfigTest do
   # ---------------------------------------------------------------------------
 
   describe "edge cases" do
-    test "handles resource with no gen_api extension gracefully" do
-      result = JsonConfig.generate(PlainModule, format: :map)
-      assert result == %{}
+    test "raises a helpful error for a module that does not exist" do
+      assert_raise ArgumentError, ~r/Cannot load module/, fn ->
+        JsonConfig.generate(DefinitelyNotAModule, format: :map)
+      end
+    end
+
+    test "raises a helpful error for a module without the gen_api extensions" do
+      assert_raise ArgumentError, ~r/neither an Ash resource with the/, fn ->
+        JsonConfig.generate(String, format: :map)
+      end
+    end
+
+    test "raises a helpful error for a non-module input" do
+      assert_raise ArgumentError, ~r/Expected an Ash domain or resource module/, fn ->
+        JsonConfig.generate("not_a_module", format: :map)
+      end
     end
 
     test "handles empty fun_configs list" do
@@ -867,10 +879,6 @@ defmodule AshPhoenixGenApi.JsonConfigTest do
   # Private helpers for tests
   # ---------------------------------------------------------------------------
 
-  # A plain module without the gen_api extension, for edge case testing
-  defmodule PlainModule do
-  end
-
   defp example_from_type(:string), do: "example_string"
   defp example_from_type(:uuid), do: "example"
   defp example_from_type(:num), do: 42
@@ -883,4 +891,32 @@ defmodule AshPhoenixGenApi.JsonConfigTest do
     Keyword.get(type, :type, type) |> example_from_type()
   end
   defp example_from_type(_), do: "example"
+
+  describe "default_value_for_type/1 — remaining clauses" do
+    test "capped string tuple form" do
+      assert JsonConfig.default_value_for_type({:string, 100}) == ""
+    end
+
+    test "boolean, datetime, and naive_datetime" do
+      assert JsonConfig.default_value_for_type(:boolean) == false
+      assert JsonConfig.default_value_for_type(:datetime) == ""
+      assert JsonConfig.default_value_for_type(:naive_datetime) == ""
+    end
+
+    test "map forms" do
+      assert JsonConfig.default_value_for_type(:map) == %{}
+      assert JsonConfig.default_value_for_type({:map, 10}) == %{}
+    end
+
+    test "list forms" do
+      assert JsonConfig.default_value_for_type(:list) == []
+      assert JsonConfig.default_value_for_type({:list, 10}) == []
+      assert JsonConfig.default_value_for_type(:list_num) == []
+    end
+
+    test "extended format with an explicit default_value wins over type default" do
+      config = [type: :num, allow_nil?: false, default_value: 42]
+      assert JsonConfig.default_value_for_type(config) == 42
+    end
+  end
 end

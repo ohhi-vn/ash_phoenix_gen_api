@@ -305,8 +305,6 @@ defmodule AshPhoenixGenApi.Resource.Info do
     else
       nil
     end
-  rescue
-    _ -> nil
   end
 
   @doc """

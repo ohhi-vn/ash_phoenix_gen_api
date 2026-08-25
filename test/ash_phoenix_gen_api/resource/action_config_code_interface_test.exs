@@ -1,5 +1,3 @@
-
-
 defmodule AshPhoenixGenApi.Resource.ActionConfig.CodeInterfaceTest do
   use ExUnit.Case
 

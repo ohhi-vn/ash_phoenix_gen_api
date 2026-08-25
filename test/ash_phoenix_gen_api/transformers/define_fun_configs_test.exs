@@ -40,7 +40,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigsTest do
     test "generated fun_configs returns a list of FunConfig structs" do
       configs = TestResource.__ash_phoenix_gen_api_fun_configs__()
       assert is_list(configs)
-      assert length(configs) > 0
+      refute configs == []
     end
 
     test "fun_config has correct request_type" do

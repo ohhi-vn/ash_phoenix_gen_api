@@ -159,7 +159,7 @@ defmodule AshPhoenixGenApi.DomainTest do
     test "fun_configs returns aggregated FunConfigs" do
       fun_configs = AshPhoenixGenApi.Domain.Info.fun_configs(TestDomain)
       assert is_list(fun_configs)
-      assert length(fun_configs) > 0
+      refute fun_configs == []
     end
 
     test "all_request_types returns all request types" do
@@ -231,7 +231,7 @@ defmodule AshPhoenixGenApi.DomainTest do
       assert is_list(resource_configs),
              "Resource fun_configs returned non-list: #{inspect(resource_configs)}"
 
-      assert length(resource_configs) > 0,
+      assert resource_configs != [],
              "Resource fun_configs returned empty list. Available functions: #{inspect(resource.__info__(:functions) |> Enum.filter(fn {name, _} -> String.contains?(to_string(name), "gen_api") end))}"
     end
 
@@ -241,7 +241,7 @@ defmodule AshPhoenixGenApi.DomainTest do
       resource_configs = resource.__ash_phoenix_gen_api_fun_configs__()
 
       # If the resource returns empty, the supporter will too
-      if length(resource_configs) == 0 do
+      if resource_configs == [] do
         flunk(
           "Resource fun_configs is empty - supporter will also be empty. " <>
             "Resource module: #{inspect(resource)}, " <>
@@ -255,7 +255,7 @@ defmodule AshPhoenixGenApi.DomainTest do
       supporter = AshPhoenixGenApi.DomainTest.TestDomain.GenApiSupporter
       configs = supporter.fun_configs()
 
-      if length(configs) == 0 do
+      if configs == [] do
         # Try to diagnose: is the resource even in the domain's resource list?
         domain_resources = Ash.Domain.Info.resources(AshPhoenixGenApi.DomainTest.TestDomain)
 
@@ -268,14 +268,14 @@ defmodule AshPhoenixGenApi.DomainTest do
           "Supporter fun_configs is empty. " <>
             "Domain resources: #{inspect(domain_resources)}, " <>
             "Resources with gen_api: #{inspect(resources_with_gen_api)}, " <>
-            "Resource fun_configs count: #{length(resource_configs)}, " <>
+            "Resource fun_configs count: #{Enum.count(resource_configs)}, " <>
             "Supporter module: #{inspect(supporter)}, " <>
             "Supporter module functions: #{inspect(supporter.__info__(:functions) |> Enum.filter(fn {name, _} -> String.contains?(to_string(name), "fun") end))}"
         )
       end
 
       assert is_list(configs)
-      assert length(configs) > 0
+      refute configs == []
     end
 
     test "list_request_types returns list of strings" do

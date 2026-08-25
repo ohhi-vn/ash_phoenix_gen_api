@@ -1,10 +1,9 @@
-
-
 defmodule AshPhoenixGenApi.Resource.CodeInterfaceActionOverrideTest do
   use ExUnit.Case
 
   @moduletag timeout: 60_000
 
+  alias AshPhoenixGenApi.Resource.Info
 
   defmodule CodeInterfaceActionOverrideResource do
     use Ash.Resource,
@@ -72,7 +71,7 @@ defmodule AshPhoenixGenApi.Resource.CodeInterfaceActionOverrideTest do
     end
 
     test "still generates fun_configs for all enabled actions" do
-      fun_configs = AshPhoenixGenApi.Resource.Info.fun_configs(CodeInterfaceActionOverrideResource)
+      fun_configs = Info.fun_configs(CodeInterfaceActionOverrideResource)
       assert length(fun_configs) == 3
     end
   end

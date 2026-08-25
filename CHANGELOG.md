@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-08-25
+
+### Added
+- Support for `before_execute` / `after_execute` hooks with `hook_timeout` on gen_api actions
+- Detailed DSL failure logs via `AshPhoenixGenApi.Debug`
+- Shared internal helpers module (`AshPhoenixGenApi.Utils`) consolidating MFA validation,
+  Spark option extraction, and source-location formatting across transformers and verifiers
+
+### Fixed
+- Fixed push using incorrect service config; nodes config from `define` is now preserved
+- Fixed permission_callback being assigned to the wrong attribute
+
+### Changed
+- `JsonConfig.generate/2` now raises an `ArgumentError` with a descriptive message when the
+  source module cannot be loaded or is not a gen_api resource/domain, instead of silently
+  returning an empty list. Empty results are still returned for valid sources without configs.
+- Removed dead code paths in `VerifyDomainConfig` (no-op service check); verifier moduledocs
+  now accurately describe what is validated (MFA structure only, not module loading)
+- Permission arg existence checks compare argument names as strings instead of creating atoms
+  at compile time, and no longer crash when the referenced Ash action is missing
+- Resolved all Dialyzer warnings; consolidated duplicated transformer/verifier helpers into
+  `AshPhoenixGenApi.Utils`; CI now tests Elixir 1.18–1.20 across OTP 27–29
+- Code quality cleanup: resolved all Credo strict-mode findings across library and test code
+  (sorted alias groups, aliased nested modules, implicit `try`, removed redundant parentheses
+  and stray blank lines); no behavior changes
+
 ## [1.1.0] - 2026-06-25
 
 ### Added

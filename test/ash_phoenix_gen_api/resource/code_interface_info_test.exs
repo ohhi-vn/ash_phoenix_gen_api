@@ -1,9 +1,9 @@
-
 defmodule AshPhoenixGenApi.Resource.CodeInterfaceInfoTest do
   use ExUnit.Case
 
   @moduletag timeout: 60_000
 
+  alias AshPhoenixGenApi.Resource.Info
 
   defmodule InfoTestResource do
     use Ash.Resource,
@@ -52,17 +52,17 @@ defmodule AshPhoenixGenApi.Resource.CodeInterfaceInfoTest do
   describe "gen_api_code_interface?/1" do
     test "returns section-level code_interface? setting" do
       # Predicate functions (ending with ?) return the value directly, not {:ok, value}
-      assert AshPhoenixGenApi.Resource.Info.gen_api_code_interface?(InfoTestResource) == true
+      assert Info.gen_api_code_interface?(InfoTestResource) == true
     end
   end
 
   describe "effective_code_interface?/2" do
     test "returns action-level override when set" do
-      assert AshPhoenixGenApi.Resource.Info.effective_code_interface?(InfoTestResource, :create) == false
+      assert Info.effective_code_interface?(InfoTestResource, :create) == false
     end
 
     test "returns section-level default when action-level not set" do
-      assert AshPhoenixGenApi.Resource.Info.effective_code_interface?(InfoTestResource, :read) == true
+      assert Info.effective_code_interface?(InfoTestResource, :read) == true
     end
   end
 end

@@ -364,7 +364,27 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyDomainConfigTest do
         end
 
       assert [{Elixir.MultiErrorDomain, error_list}] = errors
-      assert length(error_list) >= 1
+      refute error_list == []
+    end
+  end
+
+  describe "permission callback verification" do
+    test "raises for a non-MFA, non-nil permission_callback" do
+      assert_dsl_error %Spark.Error.DslError{path: [:gen_api, :permission_callback]} do
+        defmodule Elixir.BadPermCallbackDomain do
+          use Ash.Domain,
+            extensions: [AshPhoenixGenApi.Domain]
+
+          gen_api do
+            service "bad_perm"
+            supporter_module Elixir.BadPermCallbackSupporter
+            permission_callback "not_an_mfa"
+          end
+
+          resources do
+          end
+        end
+      end
     end
   end
 end

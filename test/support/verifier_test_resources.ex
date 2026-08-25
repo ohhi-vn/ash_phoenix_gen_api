@@ -7,21 +7,23 @@ defmodule AshPhoenixGenApi.VerifierTestResources do
 end
 
 defmodule AshPhoenixGenApi.VerifierTestResources.ResourceA do
+  @moduledoc false
   use Ash.Resource,
     domain: nil,
     extensions: [AshPhoenixGenApi.Resource]
 
   attributes do
-    uuid_primary_key :id
-    attribute :name, :string
+    uuid_primary_key(:id)
+    attribute(:name, :string)
   end
 
   actions do
-    defaults [:create]
+    defaults([:create])
   end
 
   gen_api do
     service "test_service"
+
     action :create do
       request_type "shared_type"
     end
@@ -29,21 +31,23 @@ defmodule AshPhoenixGenApi.VerifierTestResources.ResourceA do
 end
 
 defmodule AshPhoenixGenApi.VerifierTestResources.ResourceB do
+  @moduledoc false
   use Ash.Resource,
     domain: nil,
     extensions: [AshPhoenixGenApi.Resource]
 
   attributes do
-    uuid_primary_key :id
-    attribute :name, :string
+    uuid_primary_key(:id)
+    attribute(:name, :string)
   end
 
   actions do
-    defaults [:create]
+    defaults([:create])
   end
 
   gen_api do
     service "test_service"
+
     action :create do
       request_type "shared_type"
     end
@@ -51,20 +55,22 @@ defmodule AshPhoenixGenApi.VerifierTestResources.ResourceB do
 end
 
 defmodule AshPhoenixGenApi.VerifierTestResources.UniqueResourceA do
+  @moduledoc false
   use Ash.Resource,
     domain: nil,
     extensions: [AshPhoenixGenApi.Resource]
 
   attributes do
-    uuid_primary_key :id
+    uuid_primary_key(:id)
   end
 
   actions do
-    defaults [:create]
+    defaults([:create])
   end
 
   gen_api do
     service "test_service"
+
     action :create do
       request_type "unique_type_a"
     end
@@ -72,20 +78,22 @@ defmodule AshPhoenixGenApi.VerifierTestResources.UniqueResourceA do
 end
 
 defmodule AshPhoenixGenApi.VerifierTestResources.UniqueResourceB do
+  @moduledoc false
   use Ash.Resource,
     domain: nil,
     extensions: [AshPhoenixGenApi.Resource]
 
   attributes do
-    uuid_primary_key :id
+    uuid_primary_key(:id)
   end
 
   actions do
-    defaults [:create]
+    defaults([:create])
   end
 
   gen_api do
     service "test_service"
+
     action :create do
       request_type "unique_type_b"
     end
@@ -93,16 +101,17 @@ defmodule AshPhoenixGenApi.VerifierTestResources.UniqueResourceB do
 end
 
 defmodule AshPhoenixGenApi.VerifierTestResources.NoServiceResource do
+  @moduledoc false
   use Ash.Resource,
     domain: nil,
     extensions: [AshPhoenixGenApi.Resource]
 
   attributes do
-    uuid_primary_key :id
+    uuid_primary_key(:id)
   end
 
   actions do
-    defaults [:create]
+    defaults([:create])
   end
 
   # Intentionally no gen_api block — the verifier should detect this
@@ -110,16 +119,17 @@ defmodule AshPhoenixGenApi.VerifierTestResources.NoServiceResource do
 end
 
 defmodule AshPhoenixGenApi.VerifierTestResources.NoServiceAnnoResource do
+  @moduledoc false
   use Ash.Resource,
     domain: nil,
     extensions: [AshPhoenixGenApi.Resource]
 
   attributes do
-    uuid_primary_key :id
+    uuid_primary_key(:id)
   end
 
   actions do
-    defaults [:create]
+    defaults([:create])
   end
 
   # Intentionally no gen_api block — used for source annotation testing

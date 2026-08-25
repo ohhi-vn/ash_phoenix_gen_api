@@ -49,7 +49,7 @@ defmodule AshPhoenixGenApi.DebugTest do
       assert is_map(result)
       assert result.resource == DebugTestResource
       assert is_list(result.entities)
-      assert length(result.entities) > 0
+      refute result.entities == []
     end
 
     test "returns error for resource without gen_api" do

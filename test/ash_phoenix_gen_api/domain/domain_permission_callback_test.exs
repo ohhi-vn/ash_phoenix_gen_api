@@ -1,9 +1,9 @@
-
 defmodule AshPhoenixGenApi.Domain.PermissionCallbackTest do
   use ExUnit.Case
 
   @moduletag timeout: 60_000
 
+  alias AshPhoenixGenApi.Domain.Info
 
   defmodule DomainCallbackChecker do
     @moduledoc false
@@ -27,12 +27,12 @@ defmodule AshPhoenixGenApi.Domain.PermissionCallbackTest do
 
   describe "domain-level permission_callback" do
     test "gen_api_permission_callback returns {:ok, configured callback}" do
-      result = AshPhoenixGenApi.Domain.Info.gen_api_permission_callback(DomainPermissionCallbackDomain)
+      result = Info.gen_api_permission_callback(DomainPermissionCallbackDomain)
       assert result == {:ok, {DomainCallbackChecker, :check_permission, []}}
     end
 
     test "permission_callback helper returns configured callback" do
-      result = AshPhoenixGenApi.Domain.Info.permission_callback(DomainPermissionCallbackDomain)
+      result = Info.permission_callback(DomainPermissionCallbackDomain)
       assert result == {DomainCallbackChecker, :check_permission, []}
     end
   end

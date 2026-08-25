@@ -6,10 +6,6 @@ defmodule AshPhoenixGenApi.Codec do
   call is encoded before being returned to the caller. This module provides
   the encoding functions used by the auto-generated code interface functions.
 
-  The `result_encoder` determines how the result returned from an Ash action
-  call is encoded before being returned to the caller. This module provides
-  the encoding functions used by the auto-generated code interface functions.
-
   ## Encoder Modes
 
   - `:struct` — Return the Ash resource struct as-is (default, no encoding)
@@ -164,7 +160,8 @@ defmodule AshPhoenixGenApi.Codec do
     end
   end
 
-  def encode_value(value, {mod, fun, args}) when is_atom(mod) and is_atom(fun) and is_list(args) do
+  def encode_value(value, {mod, fun, args})
+      when is_atom(mod) and is_atom(fun) and is_list(args) do
     apply(mod, fun, [value | args])
   end
 

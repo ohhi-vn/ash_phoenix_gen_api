@@ -135,16 +135,16 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
 
   use Spark.Dsl.Transformer
 
-  alias Spark.Dsl.Transformer, as: SparkTransformer
-  alias Ash.CodeInterface
+  alias Ash.ActionInput
   alias Ash.Changeset
   alias Ash.Query
-  alias Ash.ActionInput
-  alias AshPhoenixGenApi.Resource.Info
+  alias Ash.Resource.Info, as: ResourceAshInfo
   alias AshPhoenixGenApi.Resource.ActionConfig
+  alias AshPhoenixGenApi.Resource.Info
   alias AshPhoenixGenApi.Resource.MfaConfig
   alias AshPhoenixGenApi.TypeMapper
-  alias Ash.Resource.Info, as: ResourceAshInfo
+  alias AshPhoenixGenApi.Utils
+  alias Spark.Dsl.Transformer, as: SparkTransformer
 
   @doc """
   Runs after all other transformers so that Ash action info is fully available.
@@ -174,11 +174,6 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
           dsl_state,
           [],
           quote do
-            alias CodeInterface
-            alias Changeset
-            alias Query
-            alias ActionInput
-
             @doc false
             def __ash_phoenix_gen_api_fun_configs__ do
               []
@@ -189,7 +184,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
       {:ok, dsl_state}
     else
       section_defaults = extract_section_defaults(dsl_state)
-      section_code_interface? = extract_opt(Info.gen_api_code_interface?(dsl_state), true)
+      section_code_interface? = Utils.extract_opt(Info.gen_api_code_interface?(dsl_state), true)
 
       action_fun_configs =
         actions
@@ -225,11 +220,6 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
           dsl_state,
           [],
           quote do
-            alias CodeInterface
-            alias Changeset
-            alias Query
-            alias ActionInput
-
             @doc false
             def __ash_phoenix_gen_api_fun_configs__ do
               unquote(fun_configs_escaped)
@@ -249,26 +239,22 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
 
   defp extract_section_defaults(dsl_state) do
     %{
-      service: extract_opt(Info.gen_api_service(dsl_state), nil),
-      nodes: extract_opt(Info.gen_api_nodes(dsl_state), :local),
-      choose_node_mode: extract_opt(Info.gen_api_choose_node_mode(dsl_state), :random),
-      timeout: extract_opt(Info.gen_api_timeout(dsl_state), 5_000),
-      response_type: extract_opt(Info.gen_api_response_type(dsl_state), :async),
-      request_info: extract_opt(Info.gen_api_request_info(dsl_state), true),
-      check_permission: extract_opt(Info.gen_api_check_permission(dsl_state), false),
-      permission_callback: extract_opt(Info.gen_api_permission_callback(dsl_state), nil),
-      version: extract_opt(Info.gen_api_version(dsl_state), "0.0.1"),
-      retry: extract_opt(Info.gen_api_retry(dsl_state), nil),
-      before_execute: extract_opt(Info.gen_api_before_execute(dsl_state), nil),
-      after_execute: extract_opt(Info.gen_api_after_execute(dsl_state), nil),
-      hook_timeout: extract_opt(Info.gen_api_hook_timeout(dsl_state), 5_000),
-      result_encoder: extract_opt(Info.gen_api_result_encoder(dsl_state), :struct)
+      service: Utils.extract_opt(Info.gen_api_service(dsl_state), nil),
+      nodes: Utils.extract_opt(Info.gen_api_nodes(dsl_state), :local),
+      choose_node_mode: Utils.extract_opt(Info.gen_api_choose_node_mode(dsl_state), :random),
+      timeout: Utils.extract_opt(Info.gen_api_timeout(dsl_state), 5_000),
+      response_type: Utils.extract_opt(Info.gen_api_response_type(dsl_state), :async),
+      request_info: Utils.extract_opt(Info.gen_api_request_info(dsl_state), true),
+      check_permission: Utils.extract_opt(Info.gen_api_check_permission(dsl_state), false),
+      permission_callback: Utils.extract_opt(Info.gen_api_permission_callback(dsl_state), nil),
+      version: Utils.extract_opt(Info.gen_api_version(dsl_state), "0.0.1"),
+      retry: Utils.extract_opt(Info.gen_api_retry(dsl_state), nil),
+      before_execute: Utils.extract_opt(Info.gen_api_before_execute(dsl_state), nil),
+      after_execute: Utils.extract_opt(Info.gen_api_after_execute(dsl_state), nil),
+      hook_timeout: Utils.extract_opt(Info.gen_api_hook_timeout(dsl_state), 5_000),
+      result_encoder: Utils.extract_opt(Info.gen_api_result_encoder(dsl_state), :struct)
     }
   end
-
-  defp extract_opt({:ok, value}, _default), do: value
-  defp extract_opt(:error, default), do: default
-  defp extract_opt(value, _default) when not is_tuple(value), do: value
 
   defp build_fun_config(action_config, resource, dsl_state, section_defaults) do
     request_type = ActionConfig.effective_request_type(action_config)
@@ -341,6 +327,10 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
   # Unlike action configs, mfa configs have no Ash action to auto-derive from.
   # The `request_type`, `mfa`, and `arg_types` are all explicitly provided.
   # `arg_orders` defaults to `:map` (passing args as a map with string keys).
+  #
+  # Dialyzer believes `arg_types` is always a populated map per the DSL schema,
+  # but the entity struct carries nil before schema defaults are applied.
+  @dialyzer {:nowarn_function, build_mfa_fun_config: 2}
   defp build_mfa_fun_config(mfa_config, section_defaults) do
     request_type = mfa_config.request_type
     timeout = MfaConfig.effective_timeout(mfa_config, section_defaults.timeout)
@@ -401,8 +391,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
         MfaConfig.effective_before_execute(mfa_config, section_defaults.before_execute),
       after_execute:
         MfaConfig.effective_after_execute(mfa_config, section_defaults.after_execute),
-      hook_timeout:
-        MfaConfig.effective_hook_timeout(mfa_config, section_defaults.hook_timeout)
+      hook_timeout: MfaConfig.effective_hook_timeout(mfa_config, section_defaults.hook_timeout)
     }
   end
 
@@ -462,20 +451,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
       []
     else
       # Get accepted attributes
-      accepted_attrs =
-        case action do
-          %{accept: :*} ->
-            Ash.Resource.Info.attributes(dsl_state)
-            |> Enum.filter(& &1.public?)
-
-          %{accept: accept_list} when is_list(accept_list) ->
-            accept_list
-            |> Enum.map(fn name -> Ash.Resource.Info.attribute(dsl_state, name) end)
-            |> Enum.filter(& &1)
-
-          _ ->
-            []
-        end
+      accepted_attrs = accepted_attributes(action, dsl_state)
 
       # Get action arguments
       arguments = action.arguments || []
@@ -498,6 +474,25 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
       attr_fields ++ arg_fields
     end
   end
+
+  # Resolves the accepted attributes of an Ash action, preserving order.
+  #
+  # Dialyzer believes `accept: :*` cannot occur given Ash's action types, but
+  # actions created via `defaults [...]` do carry `accept: :*` at runtime.
+  @dialyzer {:nowarn_function, accepted_attributes: 2}
+  defp accepted_attributes(%{accept: :*}, dsl_state) do
+    dsl_state
+    |> Ash.Resource.Info.attributes()
+    |> Enum.filter(& &1.public?)
+  end
+
+  defp accepted_attributes(%{accept: accept_list}, dsl_state) when is_list(accept_list) do
+    accept_list
+    |> Enum.map(&Ash.Resource.Info.attribute(dsl_state, &1))
+    |> Enum.filter(& &1)
+  end
+
+  defp accepted_attributes(_action, _dsl_state), do: []
 
   # ---------------------------------------------------------------------------
   # Code interface function generation
@@ -522,260 +517,192 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
     if is_nil(ash_action) do
       []
     else
-      action_type = ash_action.type
       bang_name = String.to_atom("#{action_name}!")
 
       result_encoder =
         ActionConfig.effective_result_encoder(action_config, section_defaults.result_encoder)
 
-      case action_type do
-        :create ->
-          build_create_interface(action_name, bang_name, action_type, result_encoder)
-
-        :read ->
-          build_read_interface(action_name, bang_name, action_type, result_encoder)
-
-        :update ->
-          build_update_interface(action_name, bang_name, action_type, result_encoder)
-
-        :destroy ->
-          build_destroy_interface(action_name, bang_name, action_type, result_encoder)
-
-        :action ->
-          build_generic_interface(action_name, bang_name, action_type, result_encoder)
-      end
+      build_interface(action_name, bang_name, ash_action.type,
+        spec: interface_spec(ash_action.type),
+        result_encoder: result_encoder
+      )
     end
   end
 
-  defp build_create_interface(action_name, bang_name, action_type, result_encoder) do
-    doc_string =
-      "Auto-generated code interface for the `:#{action_name}` gen_api action (#{action_type}).\n\n" <>
-        "Calls `Changeset.for_create/4` then `Ash.create/2`.\n\n" <>
-        "## Parameters\n" <>
-        "  - `params_or_opts` - A map of arguments matching the action's accepted attributes and arguments,\n" <>
-        "    or a keyword list of options. Uses `CodeInterface.params_and_opts/2` for disambiguation.\n" <>
-        "  - `opts` - Keyword options passed to both `for_create` and `create`:\n" <>
-        "    - `:actor` - The actor for authorization\n" <>
-        "    - `:tenant` - The tenant for multitenancy\n" <>
-        "    - `:authorize?` - Whether to run authorization\n" <>
-        "    - Other Ash options\n\n" <>
-        "## Returns\n" <>
-        "  - `{:ok, result}` on success\n" <>
-        "  - `{:error, error}` on failure"
+  # Per-action-type specification for generated code interface functions.
+  #
+  #   - `record?` — whether the function takes a record as its first argument
+  #   - `builder` — `{module, function}` building the input from
+  #     `(target, action_name, args, opts)`
+  #   - `runner` / `runner_bang` — `{module, function}` executing the built input
+  #   - `params_doc` — description of the accepted params
+  #   - `returns_doc` — newline-separated successful return values
+  #   - `record_doc` — description of the record argument (when `record?`)
+  defp interface_spec(:create) do
+    %{
+      record?: false,
+      builder: {Changeset, :for_create},
+      runner: {Ash, :create},
+      runner_bang: {Ash, :create!},
+      params_doc:
+        "A map of arguments matching the action's accepted attributes and arguments,\n" <>
+          "or a keyword list of options",
+      returns_doc: "`{:ok, result}` on success\n`{:error, error}` on failure"
+    }
+  end
 
-    bang_doc_string =
-      "Auto-generated code interface for the `:#{action_name}` gen_api action (#{action_type}).\n\n" <>
-        "Same as `#{action_name}/2` but raises on error."
+  defp interface_spec(:read) do
+    %{
+      record?: false,
+      builder: {Query, :for_read},
+      runner: {Ash, :read},
+      runner_bang: {Ash, :read!},
+      params_doc:
+        "A map of arguments matching the action's arguments,\n" <>
+          "or a keyword list of options",
+      returns_doc: "`{:ok, results}` on success (list of records)\n`{:error, error}` on failure"
+    }
+  end
 
-    result_encoder_escaped = Macro.escape(result_encoder)
+  defp interface_spec(:update) do
+    %{
+      record?: true,
+      builder: {Changeset, :for_update},
+      runner: {Ash, :update},
+      runner_bang: {Ash, :update!},
+      params_doc:
+        "A map of arguments matching the action's accepted attributes and arguments,\n" <>
+          "or a keyword list of options",
+      returns_doc: "`{:ok, result}` on success\n`{:error, error}` on failure",
+      record_doc: "The existing record to update"
+    }
+  end
+
+  defp interface_spec(:destroy) do
+    %{
+      record?: true,
+      builder: {Changeset, :for_destroy},
+      runner: {Ash, :destroy},
+      runner_bang: {Ash, :destroy!},
+      params_doc:
+        "A map of arguments matching the action's arguments,\n" <>
+          "or a keyword list of options",
+      returns_doc: "`:ok` on success\n`{:error, error}` on failure",
+      record_doc: "The record to destroy"
+    }
+  end
+
+  defp interface_spec(:action) do
+    %{
+      record?: false,
+      builder: {ActionInput, :for_action},
+      runner: {Ash, :run_action},
+      runner_bang: {Ash, :run_action!},
+      params_doc:
+        "A map of arguments matching the action's arguments,\n" <>
+          "or a keyword list of options",
+      returns_doc: "`{:ok, result}` on success\n`{:error, error}` on failure"
+    }
+  end
+
+  # Generates the regular and bang code interface functions for one action.
+  defp build_interface(action_name, bang_name, action_type, opts) do
+    spec = Keyword.fetch!(opts, :spec)
+
+    result_encoder_escaped =
+      opts |> Keyword.fetch!(:result_encoder) |> Macro.escape()
+
+    head_args = interface_head_args(spec.record?)
+    target = if spec.record?, do: quote(do: record), else: quote(do: __MODULE__)
+
+    doc_string = interface_doc(action_name, action_type, spec)
+    bang_doc_string = interface_bang_doc(action_name, action_type, spec)
+
+    {builder_mod, builder_fun} = spec.builder
+    {runner_mod, runner_fun} = spec.runner
+    {runner_mod_bang, runner_fun_bang} = spec.runner_bang
 
     [
       quote do
         @doc unquote(doc_string)
-        def unquote(action_name)(params_or_opts \\ [], opts \\ []) do
-          {args, opts} = CodeInterface.params_and_opts(params_or_opts, opts)
+        def unquote(action_name)(unquote_splicing(head_args)) do
+          {args, opts} = Ash.CodeInterface.params_and_opts(params_or_opts, opts)
 
-          Changeset.for_create(__MODULE__, unquote(action_name), args, opts)
-          |> Ash.create(opts)
+          unquote(builder_mod).unquote(builder_fun)(
+            unquote(target),
+            unquote(action_name),
+            args,
+            opts
+          )
+          |> unquote(runner_mod).unquote(runner_fun)(opts)
           |> AshPhoenixGenApi.Codec.encode_result(unquote(result_encoder_escaped))
         end
       end,
       quote do
         @doc unquote(bang_doc_string)
-        def unquote(bang_name)(params_or_opts \\ [], opts \\ []) do
-          {args, opts} = CodeInterface.params_and_opts(params_or_opts, opts)
+        def unquote(bang_name)(unquote_splicing(head_args)) do
+          {args, opts} = Ash.CodeInterface.params_and_opts(params_or_opts, opts)
 
-          Changeset.for_create(__MODULE__, unquote(action_name), args, opts)
-          |> Ash.create!(opts)
+          unquote(builder_mod).unquote(builder_fun)(
+            unquote(target),
+            unquote(action_name),
+            args,
+            opts
+          )
+          |> unquote(runner_mod_bang).unquote(runner_fun_bang)(opts)
           |> AshPhoenixGenApi.Codec.encode_value(unquote(result_encoder_escaped))
         end
       end
     ]
   end
 
-  defp build_read_interface(action_name, bang_name, action_type, result_encoder) do
-    doc_string =
-      "Auto-generated code interface for the `:#{action_name}` gen_api action (#{action_type}).\n\n" <>
-        "Calls `Query.for_read/4` then `Ash.read/2`.\n\n" <>
-        "## Parameters\n" <>
-        "  - `params_or_opts` - A map of arguments matching the action's arguments,\n" <>
-        "    or a keyword list of options. Uses `CodeInterface.params_and_opts/2` for disambiguation.\n" <>
-        "  - `opts` - Keyword options passed to both `for_read` and `read`:\n" <>
-        "    - `:actor` - The actor for authorization\n" <>
-        "    - `:tenant` - The tenant for multitenancy\n" <>
-        "    - `:authorize?` - Whether to run authorization\n" <>
-        "    - Other Ash options\n\n" <>
-        "## Returns\n" <>
-        "  - `{:ok, results}` on success (list of records)\n" <>
-        "  - `{:error, error}` on failure"
-
-    bang_doc_string =
-      "Auto-generated code interface for the `:#{action_name}` gen_api action (#{action_type}).\n\n" <>
-        "Same as `#{action_name}/2` but raises on error."
-
-    result_encoder_escaped = Macro.escape(result_encoder)
-
-    [
-      quote do
-        @doc unquote(doc_string)
-        def unquote(action_name)(params_or_opts \\ [], opts \\ []) do
-          {args, opts} = CodeInterface.params_and_opts(params_or_opts, opts)
-
-          Query.for_read(__MODULE__, unquote(action_name), args, opts)
-          |> Ash.read(opts)
-          |> AshPhoenixGenApi.Codec.encode_result(unquote(result_encoder_escaped))
-        end
-      end,
-      quote do
-        @doc unquote(bang_doc_string)
-        def unquote(bang_name)(params_or_opts \\ [], opts \\ []) do
-          {args, opts} = CodeInterface.params_and_opts(params_or_opts, opts)
-
-          Query.for_read(__MODULE__, unquote(action_name), args, opts)
-          |> Ash.read!(opts)
-          |> AshPhoenixGenApi.Codec.encode_value(unquote(result_encoder_escaped))
-        end
-      end
-    ]
+  defp interface_head_args(true) do
+    [quote(do: record), quote(do: params_or_opts \\ []), quote(do: opts \\ [])]
   end
 
-  defp build_update_interface(action_name, bang_name, action_type, result_encoder) do
-    doc_string =
-      "Auto-generated code interface for the `:#{action_name}` gen_api action (#{action_type}).\n\n" <>
-        "Calls `Changeset.for_update/4` then `Ash.update/2`.\n\n" <>
-        "## Parameters\n" <>
-        "  - `record` - The existing record to update\n" <>
-        "  - `params_or_opts` - A map of arguments matching the action's accepted attributes and arguments,\n" <>
-        "    or a keyword list of options. Uses `CodeInterface.params_and_opts/2` for disambiguation.\n" <>
-        "  - `opts` - Keyword options passed to both `for_update` and `update`:\n" <>
-        "    - `:actor` - The actor for authorization\n" <>
-        "    - `:tenant` - The tenant for multitenancy\n" <>
-        "    - `:authorize?` - Whether to run authorization\n" <>
-        "    - Other Ash options\n\n" <>
-        "## Returns\n" <>
-        "  - `{:ok, result}` on success\n" <>
-        "  - `{:error, error}` on failure"
-
-    bang_doc_string =
-      "Auto-generated code interface for the `:#{action_name}` gen_api action (#{action_type}).\n\n" <>
-        "Same as `#{action_name}/3` but raises on error."
-
-    result_encoder_escaped = Macro.escape(result_encoder)
-
-    [
-      quote do
-        @doc unquote(doc_string)
-        def unquote(action_name)(record, params_or_opts \\ [], opts \\ []) do
-          {args, opts} = CodeInterface.params_and_opts(params_or_opts, opts)
-
-          Changeset.for_update(record, unquote(action_name), args, opts)
-          |> Ash.update(opts)
-          |> AshPhoenixGenApi.Codec.encode_result(unquote(result_encoder_escaped))
-        end
-      end,
-      quote do
-        @doc unquote(bang_doc_string)
-        def unquote(bang_name)(record, params_or_opts \\ [], opts \\ []) do
-          {args, opts} = CodeInterface.params_and_opts(params_or_opts, opts)
-
-          Changeset.for_update(record, unquote(action_name), args, opts)
-          |> Ash.update!(opts)
-          |> AshPhoenixGenApi.Codec.encode_value(unquote(result_encoder_escaped))
-        end
-      end
-    ]
+  defp interface_head_args(false) do
+    [quote(do: params_or_opts \\ []), quote(do: opts \\ [])]
   end
 
-  defp build_destroy_interface(action_name, bang_name, action_type, result_encoder) do
-    doc_string =
-      "Auto-generated code interface for the `:#{action_name}` gen_api action (#{action_type}).\n\n" <>
-        "Calls `Changeset.for_destroy/4` then `Ash.destroy/2`.\n\n" <>
-        "## Parameters\n" <>
-        "  - `record` - The record to destroy\n" <>
-        "  - `params_or_opts` - A map of arguments matching the action's arguments,\n" <>
-        "    or a keyword list of options. Uses `CodeInterface.params_and_opts/2` for disambiguation.\n" <>
-        "  - `opts` - Keyword options passed to both `for_destroy` and `destroy`:\n" <>
-        "    - `:actor` - The actor for authorization\n" <>
-        "    - `:tenant` - The tenant for multitenancy\n" <>
-        "    - `:authorize?` - Whether to run authorization\n" <>
-        "    - Other Ash options\n\n" <>
-        "## Returns\n" <>
-        "  - `:ok` on success\n" <>
-        "  - `{:error, error}` on failure"
+  defp interface_doc(action_name, action_type, spec) do
+    {builder_mod, builder_fun} = spec.builder
+    {runner_mod, runner_fun} = spec.runner
 
-    bang_doc_string =
-      "Auto-generated code interface for the `:#{action_name}` gen_api action (#{action_type}).\n\n" <>
-        "Same as `#{action_name}/3` but raises on error."
-
-    result_encoder_escaped = Macro.escape(result_encoder)
-
-    [
-      quote do
-        @doc unquote(doc_string)
-        def unquote(action_name)(record, params_or_opts \\ [], opts \\ []) do
-          {args, opts} = CodeInterface.params_and_opts(params_or_opts, opts)
-
-          Changeset.for_destroy(record, unquote(action_name), args, opts)
-          |> Ash.destroy(opts)
-          |> AshPhoenixGenApi.Codec.encode_result(unquote(result_encoder_escaped))
-        end
-      end,
-      quote do
-        @doc unquote(bang_doc_string)
-        def unquote(bang_name)(record, params_or_opts \\ [], opts \\ []) do
-          {args, opts} = CodeInterface.params_and_opts(params_or_opts, opts)
-
-          Changeset.for_destroy(record, unquote(action_name), args, opts)
-          |> Ash.destroy!(opts)
-          |> AshPhoenixGenApi.Codec.encode_value(unquote(result_encoder_escaped))
-        end
+    record_section =
+      if spec.record? do
+        "  - `record` - #{spec.record_doc}\n"
+      else
+        ""
       end
-    ]
+
+    ("Auto-generated code interface for the `:#{action_name}` gen_api action (#{action_type}).\n\n" <>
+       "Calls `#{module_label(builder_mod)}.#{builder_fun}/4` then " <>
+       "`#{module_label(runner_mod)}.#{runner_fun}/2`.\n\n" <>
+       "## Parameters\n" <>
+       record_section <>
+       "  - `params_or_opts` - #{spec.params_doc}.\n" <>
+       "    Uses `CodeInterface.params_and_opts/2` for disambiguation.\n" <>
+       "  - `opts` - Keyword options passed to both `#{builder_fun}` and `#{runner_fun}`:\n" <>
+       "    - `:actor` - The actor for authorization\n" <>
+       "    - `:tenant` - The tenant for multitenancy\n" <>
+       "    - `:authorize?` - Whether to run authorization\n" <>
+       "    - Other Ash options\n\n" <>
+       "## Returns\n" <>
+       spec.returns_doc)
+    |> String.split("\n")
+    |> Enum.map_join("\n", &"  - #{&1}")
   end
 
-  defp build_generic_interface(action_name, bang_name, action_type, result_encoder) do
-    doc_string =
-      "Auto-generated code interface for the `:#{action_name}` gen_api action (#{action_type}).\n\n" <>
-        "Calls `ActionInput.for_action/4` then `Ash.run_action/2`.\n\n" <>
-        "## Parameters\n" <>
-        "  - `params_or_opts` - A map of arguments matching the action's arguments,\n" <>
-        "    or a keyword list of options. Uses `CodeInterface.params_and_opts/2` for disambiguation.\n" <>
-        "  - `opts` - Keyword options passed to both `for_action` and `run_action`:\n" <>
-        "    - `:actor` - The actor for authorization\n" <>
-        "    - `:tenant` - The tenant for multitenancy\n" <>
-        "    - `:authorize?` - Whether to run authorization\n" <>
-        "    - Other Ash options\n\n" <>
-        "## Returns\n" <>
-        "  - `{:ok, result}` on success\n" <>
-        "  - `{:error, error}` on failure"
+  defp interface_bang_doc(action_name, action_type, spec) do
+    arity = if spec.record?, do: 3, else: 2
 
-    bang_doc_string =
-      "Auto-generated code interface for the `:#{action_name}` gen_api action (#{action_type}).\n\n" <>
-        "Same as `#{action_name}/2` but raises on error."
-
-    result_encoder_escaped = Macro.escape(result_encoder)
-
-    [
-      quote do
-        @doc unquote(doc_string)
-        def unquote(action_name)(params_or_opts \\ [], opts \\ []) do
-          {args, opts} = CodeInterface.params_and_opts(params_or_opts, opts)
-
-          ActionInput.for_action(__MODULE__, unquote(action_name), args, opts)
-          |> Ash.run_action(opts)
-          |> AshPhoenixGenApi.Codec.encode_result(unquote(result_encoder_escaped))
-        end
-      end,
-      quote do
-        @doc unquote(bang_doc_string)
-        def unquote(bang_name)(params_or_opts \\ [], opts \\ []) do
-          {args, opts} = CodeInterface.params_and_opts(params_or_opts, opts)
-
-          ActionInput.for_action(__MODULE__, unquote(action_name), args, opts)
-          |> Ash.run_action!(opts)
-          |> AshPhoenixGenApi.Codec.encode_value(unquote(result_encoder_escaped))
-        end
-      end
-    ]
+    "Auto-generated code interface for the `:#{action_name}` gen_api action (#{action_type}).\n\n" <>
+      "Same as `#{action_name}/#{arity}` but raises on error."
   end
+
+  # Friendly alias-style label used in generated docs.
+  defp module_label(Ash.Changeset), do: "Changeset"
+  defp module_label(Ash.Query), do: "Query"
+  defp module_label(Ash.ActionInput), do: "ActionInput"
+  defp module_label(other), do: inspect(other)
 end

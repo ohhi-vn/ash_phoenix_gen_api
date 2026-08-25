@@ -1,10 +1,9 @@
-
-
 defmodule AshPhoenixGenApi.ResourceDisabledActionTest do
   use ExUnit.Case
 
   @moduletag timeout: 60_000
 
+  alias AshPhoenixGenApi.Resource.Info
 
   defmodule DisabledActionResource do
     use Ash.Resource,
@@ -38,19 +37,19 @@ defmodule AshPhoenixGenApi.ResourceDisabledActionTest do
 
   describe "resource with disabled action" do
     test "enabled_actions excludes disabled actions" do
-      enabled = AshPhoenixGenApi.Resource.Info.enabled_actions(DisabledActionResource)
+      enabled = Info.enabled_actions(DisabledActionResource)
       assert length(enabled) == 1
       assert hd(enabled).name == :create
     end
 
     test "fun_configs excludes disabled actions" do
-      fun_configs = AshPhoenixGenApi.Resource.Info.fun_configs(DisabledActionResource)
+      fun_configs = Info.fun_configs(DisabledActionResource)
       assert length(fun_configs) == 1
       assert hd(fun_configs).request_type == "create"
     end
 
     test "request_types excludes disabled actions" do
-      request_types = AshPhoenixGenApi.Resource.Info.request_types(DisabledActionResource)
+      request_types = Info.request_types(DisabledActionResource)
       assert request_types == ["create"]
     end
   end

@@ -17,8 +17,6 @@ defmodule AshPhoenixGenApi.TypeMapper do
   - `{:list_string, max_items, max_item_length}` - Lists of strings with constraints
   - `{:list_num, max_items}` - Lists of numbers with constraints
 
-  alias Ash.Resource.Info, as: ResourceInfo
-
   | Ash Type | PhoenixGenApi Type |
   |----------|-------------------|
   | `:string` / `Ash.Type.String` | `:string` or `{:string, max_bytes}` |
@@ -60,10 +58,12 @@ defmodule AshPhoenixGenApi.TypeMapper do
   - `Ash.Type.Enum` and `:enum` map to `:string`. If PhoenixGenApi adds native enum
     validation in the future, consider registering a custom mapping via
     `AshPhoenixGenApi.TypeMapper.register/2`.
-  - Custom Ash types (types that use `Ash.Type`) that are not in this table will
+    - Custom Ash types (types that use `Ash.Type`) that are not in this table will
     attempt to resolve via `type/1` and recursively map. If resolution fails, they
     default to `:string`. Use `register/2` to provide an explicit mapping.
   """
+
+  alias Ash.Resource.Info
 
   @default_max_list_items 1000
   @default_max_string_item_length 50
@@ -216,6 +216,9 @@ defmodule AshPhoenixGenApi.TypeMapper do
           | {:list, pos_integer()}
           | {:list_string, pos_integer(), pos_integer()}
           | {:list_num, pos_integer()}
+          # Extended format returned for constrained strings/maps/lists,
+          # e.g. [type: :string, max_bytes: 255] or [type: :list_num, max_items: 100]
+          | keyword()
   # String types
   def to_gen_api_type(type, constraints \\ [])
 
@@ -391,7 +394,7 @@ defmodule AshPhoenixGenApi.TypeMapper do
 
       iex> attr = %{__struct__: Ash.Resource.Attribute, name: :user_id, type: Ash.Type.UUID, constraints: []}
       iex> AshPhoenixGenApi.TypeMapper.attribute_to_gen_api_type(attr)
-      :string
+      :uuid
 
       iex> attr = %{__struct__: Ash.Resource.Attribute, name: :count, type: Ash.Type.Integer, constraints: []}
       iex> AshPhoenixGenApi.TypeMapper.attribute_to_gen_api_type(attr)
@@ -505,26 +508,13 @@ defmodule AshPhoenixGenApi.TypeMapper do
   """
   @spec get_action_fields(module(), atom()) :: [{atom(), atom() | tuple(), boolean()}]
   def get_action_fields(resource, action_name) do
-    action = Ash.Resource.Info.action(resource, action_name)
+    action = Info.action(resource, action_name)
 
     if is_nil(action) do
       []
     else
       # Get accepted attributes
-      accepted_attrs =
-        case action do
-          %{accept: :*} ->
-            Ash.Resource.Info.attributes(resource)
-            |> Enum.filter(& &1.public?)
-
-          accept_list when is_list(accept_list) ->
-            accept_list
-            |> Enum.map(fn name -> Ash.Resource.Info.attribute(resource, name) end)
-            |> Enum.filter(& &1)
-
-          _ ->
-            []
-        end
+      accepted_attrs = accepted_attributes(action, resource)
 
       # Get action arguments
       arguments = action.arguments || []
@@ -548,6 +538,25 @@ defmodule AshPhoenixGenApi.TypeMapper do
     end
   end
 
+  # Resolves the accepted attributes of an Ash action, preserving order.
+  #
+  # Dialyzer believes `accept: :*` cannot occur given Ash's action types, but
+  # actions created via `defaults [...]` do carry `accept: :*` at runtime.
+  @dialyzer {:nowarn_function, accepted_attributes: 2}
+  defp accepted_attributes(%{accept: :*}, resource) do
+    resource
+    |> Info.attributes()
+    |> Enum.filter(& &1.public?)
+  end
+
+  defp accepted_attributes(%{accept: accept_list}, resource) when is_list(accept_list) do
+    accept_list
+    |> Enum.map(&Info.attribute(resource, &1))
+    |> Enum.filter(& &1)
+  end
+
+  defp accepted_attributes(_action, _resource), do: []
+
   @doc """
   Builds arg_types map and arg_orders list from action fields.
 
@@ -567,7 +576,10 @@ defmodule AshPhoenixGenApi.TypeMapper do
   def build_arg_config(fields) do
     arg_orders =
       fields
-      |> Enum.map(fn {name, _type, _allow_nil?, _default_val} -> Atom.to_string(name) end)
+      |> Enum.map(fn field ->
+        {name, _type, _allow_nil?, _default_val} = extract_field_info(field)
+        Atom.to_string(name)
+      end)
 
     arg_types =
       fields
@@ -618,7 +630,7 @@ defmodule AshPhoenixGenApi.TypeMapper do
       [type: :string, allow_nil?: true]
 
       iex> AshPhoenixGenApi.TypeMapper.build_type_config({:string, 255}, true)
-      [type: {:string, 255}, allow_nil?: true]
+      [type: :string, max_bytes: 255, allow_nil?: true]
   """
   @spec build_type_config(atom() | tuple(), boolean(), any()) :: atom() | tuple() | keyword()
   def build_type_config(type, false, _default_val), do: type

@@ -1,5 +1,3 @@
-
-
 defmodule AshPhoenixGenApi.Resource.MfaVerifierTest do
   use ExUnit.Case
 

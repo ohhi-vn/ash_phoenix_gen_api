@@ -1,9 +1,9 @@
-
 defmodule AshPhoenixGenApi.Resource.CodeInterfaceDisabledTest do
   use ExUnit.Case
 
   @moduletag timeout: 60_000
 
+  alias AshPhoenixGenApi.Resource.Info
 
   defmodule CodeInterfaceDisabledResource do
     use Ash.Resource,
@@ -55,7 +55,7 @@ defmodule AshPhoenixGenApi.Resource.CodeInterfaceDisabledTest do
     end
 
     test "still generates fun_configs" do
-      fun_configs = AshPhoenixGenApi.Resource.Info.fun_configs(CodeInterfaceDisabledResource)
+      fun_configs = Info.fun_configs(CodeInterfaceDisabledResource)
       assert length(fun_configs) == 2
     end
   end

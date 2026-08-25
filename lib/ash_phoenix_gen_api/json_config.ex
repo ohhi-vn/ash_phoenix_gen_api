@@ -95,8 +95,8 @@ defmodule AshPhoenixGenApi.JsonConfig do
       )
   """
 
-  alias AshPhoenixGenApi.Resource.Info, as: ResourceInfo
   alias AshPhoenixGenApi.Domain.Info, as: DomainInfo
+  alias AshPhoenixGenApi.Resource.Info, as: ResourceInfo
 
   # ---------------------------------------------------------------------------
   # Types
@@ -314,6 +314,7 @@ defmodule AshPhoenixGenApi.JsonConfig do
   @spec to_json([map()], [option()]) :: String.t()
   def to_json(fun_configs, opts \\ []) do
     opts = Keyword.merge(@default_opts, opts)
+
     fun_configs
     |> fun_configs_to_map(opts)
     |> encode_json()
@@ -410,6 +411,7 @@ defmodule AshPhoenixGenApi.JsonConfig do
   def default_value_for_type({:list_string, _, _}), do: []
   def default_value_for_type(:list_num), do: []
   def default_value_for_type({:list_num, _}), do: []
+
   def default_value_for_type(type) when is_list(type) do
     # Extended format: [type: ..., allow_nil?: ..., default_value: ...]
     # Priority: explicit default_value > type-based default
@@ -418,9 +420,12 @@ defmodule AshPhoenixGenApi.JsonConfig do
         # Get the underlying type and return its default
         underlying_type = Keyword.get(type, :type, :string)
         default_value_for_type(underlying_type)
-      default_val -> default_val
+
+      default_val ->
+        default_val
     end
   end
+
   def default_value_for_type(_), do: ""
 
   # ---------------------------------------------------------------------------
@@ -430,17 +435,37 @@ defmodule AshPhoenixGenApi.JsonConfig do
   # Retrieves FunConfig structs from a domain or resource module.
   #
   # Detection strategy:
-  #   1. If the module exports `__ash_phoenix_gen_api_fun_configs__/0`, it's a resource.
-  #   2. Otherwise, try treating it as a domain via `DomainInfo.fun_configs/1`.
-  #   3. If both fail, return an empty list.
-  defp get_fun_configs(source) do
-    if function_exported?(source, :__ash_phoenix_gen_api_fun_configs__, 0) do
-      ResourceInfo.fun_configs(source)
-    else
-      DomainInfo.fun_configs(source)
+  #   1. If the module exports `__ash_phoenix_gen_api_fun_configs__/0`, it's
+  #      an Ash resource with the gen_api extension.
+  #   2. Otherwise, if it is an Ash domain, aggregate via `DomainInfo.fun_configs/1`.
+  #   3. Otherwise, raise ArgumentError — silently returning an empty list here
+  #      would hide misconfiguration (e.g. typos in module names).
+  defp get_fun_configs(source) when is_atom(source) do
+    case Code.ensure_loaded(source) do
+      {:module, ^source} ->
+        cond do
+          function_exported?(source, :__ash_phoenix_gen_api_fun_configs__, 0) ->
+            ResourceInfo.fun_configs(source)
+
+          Spark.Dsl.is?(source, Ash.Domain) ->
+            DomainInfo.fun_configs(source)
+
+          true ->
+            raise ArgumentError,
+                  "#{inspect(source)} is neither an Ash resource with the " <>
+                    "AshPhoenixGenApi.Resource extension nor an Ash domain with the " <>
+                    "AshPhoenixGenApi.Domain extension"
+        end
+
+      {:error, reason} ->
+        raise ArgumentError,
+              "Cannot load module #{inspect(source)}: #{inspect(reason)}"
     end
-  rescue
-    _ -> []
+  end
+
+  defp get_fun_configs(source) do
+    raise ArgumentError,
+          "Expected an Ash domain or resource module, got: #{inspect(source)}"
   end
 
   # ---------------------------------------------------------------------------

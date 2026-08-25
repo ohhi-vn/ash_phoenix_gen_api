@@ -4,6 +4,7 @@ defmodule AshPhoenixGenApi.Resource.PermissionCallbackTest do
   @moduletag timeout: 60_000
 
   alias AshPhoenixGenApi.Resource.ActionConfig
+  alias AshPhoenixGenApi.Resource.Info
 
   defmodule TestPermissionChecker do
     @moduledoc false
@@ -99,7 +100,7 @@ defmodule AshPhoenixGenApi.Resource.PermissionCallbackTest do
 
   describe "permission_callback in FunConfig generation" do
     test "permission_callback is stored in FunConfig permission_callback field" do
-      fun_configs = AshPhoenixGenApi.Resource.Info.fun_configs(PermissionCallbackResource)
+      fun_configs = Info.fun_configs(PermissionCallbackResource)
 
       for config <- fun_configs do
         assert config.permission_callback == {TestPermissionChecker, :check_permission, []}
@@ -146,7 +147,7 @@ defmodule AshPhoenixGenApi.Resource.PermissionCallbackTest do
         end
       end
 
-      fun_configs = AshPhoenixGenApi.Resource.Info.fun_configs(ActionOverrideResource)
+      fun_configs = Info.fun_configs(ActionOverrideResource)
       create_config = Enum.find(fun_configs, &(&1.request_type == "create"))
       read_config = Enum.find(fun_configs, &(&1.request_type == "read"))
 
@@ -186,7 +187,7 @@ defmodule AshPhoenixGenApi.Resource.PermissionCallbackTest do
         end
       end
 
-      fun_configs = AshPhoenixGenApi.Resource.Info.fun_configs(NoCallbackResource)
+      fun_configs = Info.fun_configs(NoCallbackResource)
       create_config = Enum.find(fun_configs, &(&1.request_type == "create"))
       assert create_config.check_permission == :any_authenticated
     end
@@ -195,13 +196,13 @@ defmodule AshPhoenixGenApi.Resource.PermissionCallbackTest do
   describe "permission_callback introspection" do
     test "gen_api_permission_callback returns {:ok, section-level setting}" do
       result =
-        AshPhoenixGenApi.Resource.Info.gen_api_permission_callback(PermissionCallbackResource)
+        Info.gen_api_permission_callback(PermissionCallbackResource)
 
       assert result == {:ok, {TestPermissionChecker, :check_permission, []}}
     end
 
     test "effective_permission_callback resolves correctly" do
-      assert AshPhoenixGenApi.Resource.Info.effective_permission_callback(
+      assert Info.effective_permission_callback(
                PermissionCallbackResource,
                :create
              ) ==

@@ -1,9 +1,7 @@
-
 defmodule AshPhoenixGenApi.Resource.ResultEncoderTest do
   use ExUnit.Case
 
   @moduletag timeout: 60_000
-
 
   alias AshPhoenixGenApi.Resource.Info
 

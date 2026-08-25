@@ -18,8 +18,10 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyActionConfigs do
      `{:arg, "arg_name"}`, the argument must exist in either the explicit
      `arg_types` or the Ash action's accepted attributes/arguments.
 
-  5. **MFA validity** — When an explicit `mfa` is provided, the module
-     must be loaded (or the function must exist if the module is loaded).
+  5. **MFA structure** — When an explicit `mfa` is provided, it must be an
+     MFA tuple `{module, function, args}` where module and function are atoms
+     and args is a list. (Whether the module is loaded and the function exists
+     is validated at runtime when the endpoint is invoked.)
 
   6. **Permission callback validity** — When `permission_callback` is
      provided, it must be a valid MFA tuple `{module, function, args}`
@@ -34,11 +36,12 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyActionConfigs do
 
   use Spark.Dsl.Verifier
 
-  alias Spark.Dsl.Verifier, as: SparkVerifier
-  alias AshPhoenixGenApi.Resource.Info
-  alias AshPhoenixGenApi.Resource.ActionConfig
-  alias AshPhoenixGenApi.Resource.MfaConfig
   alias Ash.Resource.Info, as: ResourceAshInfo
+  alias AshPhoenixGenApi.Resource.ActionConfig
+  alias AshPhoenixGenApi.Resource.Info
+  alias AshPhoenixGenApi.Resource.MfaConfig
+  alias AshPhoenixGenApi.Utils
+  alias Spark.Dsl.Verifier, as: SparkVerifier
 
   @impl true
   def verify(dsl_state) do
@@ -49,15 +52,15 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyActionConfigs do
     actions = Enum.filter(entities, &match?(%ActionConfig{}, &1))
     mfas = Enum.filter(entities, &match?(%MfaConfig{}, &1))
 
-    # Verify each config
+    # Verify each config.
+    # Note: required mfa fields (request_type, mfa, arg_types) are enforced by
+    # the Spark entity schema itself, before verifiers run.
     with :ok <- verify_actions_exist(dsl_state, resource, actions),
-         :ok <- verify_mfa_required_fields(resource, mfas),
          :ok <- verify_request_type_uniqueness(resource, actions, mfas),
          :ok <- verify_arg_consistency(resource, actions, mfas),
          :ok <- verify_permission_args(dsl_state, resource, actions, mfas),
-         :ok <- verify_mfa_validity(resource, actions, mfas),
-         :ok <- verify_permission_callbacks(resource, actions, mfas) do
-      :ok
+         :ok <- verify_mfa_validity(resource, actions, mfas) do
+      verify_permission_callbacks(resource, actions, mfas)
     end
   end
 
@@ -80,7 +83,7 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyActionConfigs do
       end)
       |> Enum.map(fn action_config ->
         location = get_entity_location(action_config)
-        source_info = format_source_location(location)
+        source_info = Utils.format_source_location(location)
 
         "The action `#{inspect(action_config.name)}` does not exist on " <>
           "resource `#{inspect(resource)}`. Available actions: " <>
@@ -95,56 +98,6 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyActionConfigs do
         path: [:gen_api],
         message: """
         Invalid action configurations:
-
-        #{Enum.join(errors, "\n\n")}
-        """
-    end
-  end
-
-  # ---------------------------------------------------------------------------
-  # MFA required fields verification
-  # ---------------------------------------------------------------------------
-
-  defp verify_mfa_required_fields(resource, mfas) do
-    errors =
-      mfas
-      |> Enum.flat_map(fn mfa_config ->
-        errors = []
-
-        errors =
-          if is_nil(mfa_config.request_type) or mfa_config.request_type == "" do
-            ["MFA `#{inspect(mfa_config.name)}`: request_type is required" | errors]
-          else
-            errors
-          end
-
-        errors =
-          case mfa_config.mfa do
-            {mod, fun, args} when is_atom(mod) and is_atom(fun) and is_list(args) ->
-              errors
-
-            _ ->
-              ["MFA `#{inspect(mfa_config.name)}`: mfa must be a valid {module, function, args_list} tuple" | errors]
-          end
-
-        errors =
-          if is_nil(mfa_config.arg_types) do
-            ["MFA `#{inspect(mfa_config.name)}`: arg_types is required (no Ash action to auto-derive from)" | errors]
-          else
-            errors
-          end
-
-        errors
-      end)
-
-    if errors == [] do
-      :ok
-    else
-      raise Spark.Error.DslError,
-        module: resource,
-        path: [:gen_api],
-        message: """
-        MFA configuration errors:
 
         #{Enum.join(errors, "\n\n")}
         """
@@ -177,6 +130,7 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyActionConfigs do
       |> Enum.filter(fn {_request_type, occurrences} -> length(occurrences) > 1 end)
       |> Enum.map(fn {request_type, occurrences} ->
         names = Enum.map(occurrences, fn {_, name} -> name end)
+
         "The request_type `#{request_type}` is used by multiple endpoints: " <>
           "#{inspect(names)}. Each endpoint must have a unique request_type."
       end)
@@ -332,16 +286,7 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyActionConfigs do
       |> Enum.flat_map(fn action_config ->
         case action_config.check_permission do
           {:arg, arg_name} when is_binary(arg_name) ->
-            # Check that the arg exists in either explicit arg_types or the Ash action
-            if permission_arg_exists_in_action?(dsl_state, action_config, arg_name) do
-              []
-            else
-              [
-                "Action `#{action_config.name}`: check_permission references arg " <>
-                  "`#{inspect(arg_name)}` but it is not found in arg_types or the " <>
-                  "Ash action's attributes/arguments"
-              ]
-            end
+            missing_action_permission_arg?(dsl_state, action_config, arg_name)
 
           _ ->
             []
@@ -353,15 +298,7 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyActionConfigs do
       |> Enum.flat_map(fn mfa_config ->
         case mfa_config.check_permission do
           {:arg, arg_name} when is_binary(arg_name) ->
-            # For mfa entities, only check against explicit arg_types
-            if is_map(mfa_config.arg_types) and Map.has_key?(mfa_config.arg_types, arg_name) do
-              []
-            else
-              [
-                "MFA `#{mfa_config.name}`: check_permission references arg " <>
-                  "`#{inspect(arg_name)}` but it is not found in arg_types"
-              ]
-            end
+            missing_mfa_permission_arg?(mfa_config, arg_name)
 
           _ ->
             []
@@ -384,19 +321,44 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyActionConfigs do
     end
   end
 
+  # For mfa entities, only check against explicit arg_types
+  defp missing_mfa_permission_arg?(mfa_config, arg_name) do
+    if is_map(mfa_config.arg_types) and Map.has_key?(mfa_config.arg_types, arg_name) do
+      []
+    else
+      [
+        "MFA `#{mfa_config.name}`: check_permission references arg " <>
+          "`#{inspect(arg_name)}` but it is not found in arg_types"
+      ]
+    end
+  end
+
+  # Checks that the arg exists in either explicit arg_types or the Ash action
+  defp missing_action_permission_arg?(dsl_state, action_config, arg_name) do
+    if permission_arg_exists_in_action?(dsl_state, action_config, arg_name) do
+      []
+    else
+      [
+        "Action `#{action_config.name}`: check_permission references arg " <>
+          "`#{inspect(arg_name)}` but it is not found in arg_types or the " <>
+          "Ash action's attributes/arguments"
+      ]
+    end
+  end
+
   defp permission_arg_exists_in_action?(dsl_state, action_config, arg_name) do
     # Check the Ash action's attributes and arguments
     ash_action = ResourceAshInfo.action(dsl_state, action_config.name)
     arg_exists_in_ash_action?(ash_action, arg_name)
   end
 
-  defp arg_exists_in_ash_action?(ash_action, arg_name) do
-    arg_name_atom = String.to_atom(arg_name)
+  defp arg_exists_in_ash_action?(nil, _arg_name), do: false
 
-    # Check action arguments
+  defp arg_exists_in_ash_action?(ash_action, arg_name) do
+    # Compare names as strings to avoid creating atoms from DSL input
     in_arguments =
       ash_action.arguments
-      |> Enum.any?(fn arg -> arg.name == arg_name_atom end)
+      |> Enum.any?(fn arg -> Atom.to_string(arg.name) == arg_name end)
 
     # Check accepted attributes (for create/update actions)
     in_accept =
@@ -405,7 +367,7 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyActionConfigs do
           true
 
         accept_list when is_list(accept_list) ->
-          arg_name_atom in accept_list
+          Enum.any?(accept_list, fn name -> Atom.to_string(name) == arg_name end)
 
         _ ->
           false
@@ -440,18 +402,17 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyActionConfigs do
   defp check_mfa_validity_for_items(items, type) do
     items
     |> Enum.flat_map(fn config ->
-      case config.mfa do
-        nil ->
-          # Auto-generated MFA or not applicable — always valid
+      cond do
+        # Auto-generated MFA or not applicable — always valid
+        is_nil(config.mfa) ->
           []
 
-        {mod, fun, args} when is_atom(mod) and is_atom(fun) and is_list(args) ->
-          # Valid MFA structure
+        Utils.valid_mfa?(config.mfa) ->
           []
 
-        mfa ->
+        true ->
           [
-            "#{type} `#{config.name}`: invalid MFA tuple `#{inspect(mfa)}`. " <>
+            "#{type} `#{config.name}`: invalid MFA tuple `#{inspect(config.mfa)}`. " <>
               "Expected `{module, function, args_list}` where module and function are atoms " <>
               "and args is a list."
           ]
@@ -485,21 +446,20 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyActionConfigs do
   defp check_permission_callback_for_items(items, type) do
     items
     |> Enum.flat_map(fn config ->
-      case config.permission_callback do
-        nil ->
-          # No callback — always valid
+      cond do
+        # No callback — always valid
+        is_nil(config.permission_callback) ->
           []
 
-        {mod, fun, args} when is_atom(mod) and is_atom(fun) and is_list(args) ->
-          # Valid MFA structure
+        Utils.valid_mfa?(config.permission_callback) ->
           []
 
-        permission_callback ->
+        true ->
           location = get_entity_location(config)
-          source_info = format_source_location(location)
+          source_info = Utils.format_source_location(location)
 
           [
-            "#{type} `#{config.name}`: invalid permission_callback `#{inspect(permission_callback)}`. " <>
+            "#{type} `#{config.name}`: invalid permission_callback `#{inspect(config.permission_callback)}`. " <>
               "Expected `{Module, :function, []}` where Module and function are atoms " <>
               "and args is a list, or `nil`." <> source_info
           ]
@@ -526,22 +486,4 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyActionConfigs do
   end
 
   defp get_entity_location(_), do: nil
-
-  @doc false
-  defp format_source_location(nil), do: ""
-
-  defp format_source_location(anno) when is_tuple(anno) do
-    line = :erl_anno.location(anno)
-    file = :erl_anno.file(anno)
-
-    source_file =
-      case file do
-        :undefined -> ""
-        charlist -> " (source: #{Path.relative_to_cwd(to_string(charlist))}:#{line})"
-      end
-
-    "\n  Defined at#{source_file}"
-  end
-
-  defp format_source_location(_), do: ""
 end

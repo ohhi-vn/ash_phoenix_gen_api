@@ -504,10 +504,163 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyActionConfigsTest do
         end
 
       assert [{Elixir.MultiErrorResource, error_list}] = errors
-      assert length(error_list) >= 1
+      refute error_list == []
       # Both nonexistent actions should be reported in the error message
       assert Enum.any?(error_list, &(&1.message =~ "nonexistent_one"))
       assert Enum.any?(error_list, &(&1.message =~ "nonexistent_two"))
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Remaining validation branches
+  # ---------------------------------------------------------------------------
+
+  describe "mfa required field verification" do
+    # The entity schema itself (required: true) rejects these at build time,
+    # before verifiers run — assert Spark's own build error.
+    test "schema rejects an mfa entity without required fields" do
+      assert_raise Spark.Error.DslError, ~r/arg_types/, fn ->
+        defmodule Elixir.MfaMissingFieldsResource do
+          use Ash.Resource,
+            domain: nil,
+            extensions: [AshPhoenixGenApi.Resource]
+
+          attributes do
+            uuid_primary_key(:id)
+          end
+
+          actions do
+            defaults([:create])
+          end
+
+          gen_api do
+            service "test"
+
+            mfa :bare_endpoint do
+              mfa({SomeEndpoint, :call, []})
+            end
+          end
+        end
+      end
+    end
+  end
+
+  describe "arg_orders without arg_types" do
+    test "errors for action entities" do
+      assert_dsl_error %Spark.Error.DslError{path: [:gen_api]} do
+        defmodule Elixir.ActionOrdersOnlyResource do
+          use Ash.Resource,
+            domain: nil,
+            extensions: [AshPhoenixGenApi.Resource]
+
+          attributes do
+            uuid_primary_key(:id)
+          end
+
+          actions do
+            defaults([:create])
+          end
+
+          gen_api do
+            service "test"
+
+            action :create do
+              request_type "create"
+              arg_orders(["id"])
+            end
+          end
+        end
+      end
+    end
+
+    test "errors for mfa entities with empty arg_types map" do
+      assert_dsl_error %Spark.Error.DslError{path: [:gen_api]} do
+        defmodule Elixir.MfaOrdersOnlyResource do
+          use Ash.Resource,
+            domain: nil,
+            extensions: [AshPhoenixGenApi.Resource]
+
+          attributes do
+            uuid_primary_key(:id)
+          end
+
+          actions do
+            defaults([:create])
+          end
+
+          gen_api do
+            service "test"
+
+            mfa :orders_only do
+              request_type "orders_only"
+              mfa({SomeEndpoint, :call, []})
+              arg_types(%{})
+              arg_orders(["a", "b"])
+            end
+          end
+        end
+      end
+    end
+  end
+
+  describe "arg key mismatch between arg_types and arg_orders" do
+    test "reports keys missing from arg_orders" do
+      assert_dsl_error %Spark.Error.DslError{path: [:gen_api]} do
+        defmodule Elixir.ArgKeysMismatchResource do
+          use Ash.Resource,
+            domain: nil,
+            extensions: [AshPhoenixGenApi.Resource]
+
+          attributes do
+            uuid_primary_key(:id)
+          end
+
+          actions do
+            defaults([:create])
+          end
+
+          gen_api do
+            service "test"
+
+            action :create do
+              request_type "create"
+              arg_types(%{"id" => :uuid, "name" => :string})
+              arg_orders(["id"])
+            end
+          end
+        end
+      end
+    end
+  end
+
+  describe "mfa check_permission arg not present in arg_types" do
+    test "raises permission configuration error" do
+      assert_dsl_error %Spark.Error.DslError{path: [:gen_api]} do
+        defmodule Elixir.MfaPermArgMissingResource do
+          use Ash.Resource,
+            domain: nil,
+            extensions: [AshPhoenixGenApi.Resource]
+
+          attributes do
+            uuid_primary_key(:id)
+          end
+
+          actions do
+            defaults([:create])
+          end
+
+          gen_api do
+            service "test"
+
+            mfa :perm_checked do
+              request_type "perm_checked"
+              mfa({SomeEndpoint, :call, []})
+              arg_types(%{"token" => :string})
+              check_permission({:arg, "missing_arg"})
+            end
+          end
+        end
+      end
     end
   end
 end

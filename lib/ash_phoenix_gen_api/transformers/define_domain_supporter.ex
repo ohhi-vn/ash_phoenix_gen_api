@@ -144,18 +144,15 @@ defmodule AshPhoenixGenApi.Transformers.DefineDomainSupporter do
 
   use Spark.Dsl.Transformer
 
-  alias Spark.Dsl.Transformer, as: SparkTransformer
   alias Ash.Domain.Info, as: DomainInfo
   alias AshPhoenixGenApi.Domain.Info
+  alias AshPhoenixGenApi.Utils
+  alias Spark.Dsl.Transformer, as: SparkTransformer
 
   @doc """
   Runs after the DefineFunConfigs transformer so that resource FunConfigs
   are already generated.
   """
-
-  # @impl true
-  # def after?(_), do: true
-
   @impl true
   def after?(AshPhoenixGenApi.Transformers.DefineFunConfigs), do: true
   def after?(_), do: true
@@ -171,109 +168,82 @@ defmodule AshPhoenixGenApi.Transformers.DefineDomainSupporter do
     resources =
       SparkTransformer.get_entities(dsl_state, [:resources])
 
-    Enum.each(resources, fn resource_info -> Code.ensure_compiled(resource_info.resource) end)
+    Enum.each(resources, &Code.ensure_compiled(&1.resource))
 
     domain = SparkTransformer.get_persisted(dsl_state, :module)
 
     # Check if gen_api is configured on this domain
-    supporter_module = extract_opt(Info.gen_api_supporter_module(dsl_state), nil)
-    define_supporter? = extract_opt(Info.gen_api_define_supporter?(dsl_state), true)
+    supporter_module = Utils.extract_opt(Info.gen_api_supporter_module(dsl_state), nil)
+    define_supporter? = Utils.extract_opt(Info.gen_api_define_supporter?(dsl_state), true)
 
-    if is_nil(supporter_module) or not is_atom(supporter_module) do
-      # No gen_api configured on this domain — skip
-      # Also skip if supporter_module is not an atom (invalid config);
-      # the VerifyDomainConfig verifier will raise the appropriate error.
-      {:ok, dsl_state}
-    else
-      if define_supporter? do
-        version = extract_opt(Info.gen_api_version(dsl_state), "0.0.1")
-        service = extract_opt(Info.gen_api_service(dsl_state), nil)
-        nodes = extract_opt(Info.gen_api_nodes(dsl_state), :local)
-        push_nodes = extract_opt(Info.gen_api_push_nodes(dsl_state), nil)
-        config_argument = extract_opt(Info.gen_api_config_argument(dsl_state), :api_gateway)
-
-        # We use runtime resource discovery instead of compile-time enumeration
-        # because resource modules may not be fully compiled when the domain
-        # transformer runs (e.g. when both are defined in the same test file).
-        # The generated fun_configs/0 function will discover resources at
-        # runtime by querying the domain and checking for the
-        # __ash_phoenix_gen_api_fun_configs__/0 export.
-
-        version_string = version || "0.0.1"
-        service_string = if is_atom(service), do: Atom.to_string(service), else: service
-
-        domain_escaped = Macro.escape(domain)
-        service_string_escaped = Macro.escape(service_string)
-        version_string_escaped = Macro.escape(version_string)
-        nodes_escaped = Macro.escape(nodes)
-        push_nodes_escaped = Macro.escape(push_nodes)
-
-        config_argument_escaped = Macro.escape(config_argument)
-
-        dsl_state =
-          SparkTransformer.eval(
-            dsl_state,
-            [],
-            generate_supporter_module(
-              domain_escaped,
-              service_string_escaped,
-              version_string_escaped,
-              nodes_escaped,
-              push_nodes_escaped,
-              config_argument_escaped,
-              supporter_module
-            )
-          )
-
-        {:ok, dsl_state}
-      else
-        # define_supporter? is false — skip module generation
-        {:ok, dsl_state}
-      end
-    end
+    maybe_generate_supporter(dsl_state, domain, supporter_module, define_supporter?)
   end
 
-  # ---------------------------------------------------------------------------
-  # Private helpers
-  # ---------------------------------------------------------------------------
+  # No gen_api configured on this domain — skip.
+  # Also skip if supporter_module is not an atom (invalid config);
+  # the VerifyDomainConfig verifier will raise the appropriate error.
+  defp maybe_generate_supporter(dsl_state, _domain, supporter_module, _define_supporter?)
+       when is_nil(supporter_module) or not is_atom(supporter_module) do
+    {:ok, dsl_state}
+  end
 
-  # The `fun_configs/0` function is now generated inline in the supporter
-  # module definition above, using runtime resource discovery instead of
-  # compile-time enumeration. This avoids issues where resource modules
-  # may not be fully compiled when the domain transformer runs.
-  #
-  # The previous approach used `generate_fun_configs_body/1` to build a
-  # `def fun_configs do ... end` AST at compile time, but that required
-  # knowing the list of resources with gen_api at compile time, which is
-  # unreliable when resources and domains are compiled in the same run.
-  #
-  # The runtime approach:
-  #   1. Calls `Ash.Domain.Info.resources(domain)` to get all resources
-  #   2. Filters those that export `__ash_phoenix_gen_api_fun_configs__/0`
-  #   3. Calls that function on each and concatenates with `Enum.flat_map/2`
-  #
-  # This is slightly slower at runtime but much more robust at compile time.
+  defp maybe_generate_supporter(dsl_state, domain, supporter_module, true) do
+    version = Utils.extract_opt(Info.gen_api_version(dsl_state), "0.0.1")
+    service = Utils.extract_opt(Info.gen_api_service(dsl_state), nil)
+    nodes = Utils.extract_opt(Info.gen_api_nodes(dsl_state), :local)
+    push_nodes = Utils.extract_opt(Info.gen_api_push_nodes(dsl_state), nil)
+    config_argument = Utils.extract_opt(Info.gen_api_config_argument(dsl_state), :api_gateway)
 
-  # ---------------------------------------------------------------------------
-  # Private helpers
-  # ---------------------------------------------------------------------------
+    # We use runtime resource discovery instead of compile-time enumeration
+    # because resource modules may not be fully compiled when the domain
+    # transformer runs (e.g. when both are defined in the same test file).
+    # The generated fun_configs/0 function will discover resources at
+    # runtime by querying the domain and checking for the
+    # __ash_phoenix_gen_api_fun_configs__/0 export.
 
-  # Extracts a value from a Spark.InfoGenerator result.
-  # Spark.InfoGenerator generates two versions of each accessor:
-  # - `gen_api_foo/1` returns `{:ok, value}` or `:error`
-  # - `gen_api_foo!/1` returns the value or raises
-  # - Predicate functions (ending with `?`) return the value directly
-  #
-  # This helper unwraps the `{:ok, value}` tuple, falls back to the
-  # provided default when the option is not configured (`:error`),
-  # and also passes through direct values (for predicate functions).
-  defp extract_opt({:ok, value}, _default), do: value
-  defp extract_opt(:error, default), do: default
-  defp extract_opt(value, _default) when not is_tuple(value), do: value
+    version_string = version || "0.0.1"
+    service_string = if is_atom(service), do: Atom.to_string(service), else: service
+
+    domain_escaped = Macro.escape(domain)
+    service_string_escaped = Macro.escape(service_string)
+    version_string_escaped = Macro.escape(version_string)
+    nodes_escaped = Macro.escape(nodes)
+    push_nodes_escaped = Macro.escape(push_nodes)
+
+    config_argument_escaped = Macro.escape(config_argument)
+
+    dsl_state =
+      SparkTransformer.eval(
+        dsl_state,
+        [],
+        generate_supporter_module(
+          domain_escaped,
+          service_string_escaped,
+          version_string_escaped,
+          nodes_escaped,
+          push_nodes_escaped,
+          config_argument_escaped,
+          supporter_module
+        )
+      )
+
+    {:ok, dsl_state}
+  end
+
+  # define_supporter? is false — skip module generation
+  defp maybe_generate_supporter(dsl_state, _domain, _supporter_module, false) do
+    {:ok, dsl_state}
+  end
 
   # ---------------------------------------------------------------------------
   # Supporter module generation helpers
   # ---------------------------------------------------------------------------
+
+  # The `fun_configs/0` function in the generated supporter module uses
+  # runtime resource discovery (querying the domain and filtering for the
+  # `__ash_phoenix_gen_api_fun_configs__/0` export) instead of compile-time
+  # enumeration, because resource modules may not be fully compiled when
+  # the domain transformer runs.
 
   defp generate_supporter_module(
          domain_escaped,
@@ -588,7 +558,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineDomainSupporter do
     end
   end
 
-  defp generate_push_to_configured_nodes() do
+  defp generate_push_to_configured_nodes do
     quote do
       @doc """
       Pushes config to all configured push_nodes.

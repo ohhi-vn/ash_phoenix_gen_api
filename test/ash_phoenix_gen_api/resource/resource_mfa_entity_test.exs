@@ -1,9 +1,7 @@
-
 defmodule AshPhoenixGenApi.Resource.MfaEntityTest do
   use ExUnit.Case
 
   @moduletag timeout: 60_000
-
 
   alias AshPhoenixGenApi.Resource.Info
   alias AshPhoenixGenApi.Resource.MfaConfig

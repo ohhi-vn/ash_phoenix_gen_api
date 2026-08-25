@@ -5,7 +5,7 @@ defmodule AshPhoenixGenApi.MixProject do
   Ash extension for generating function configurations for PhoenixGenApi framework from Ash resources.
   """
 
-  @version "1.2.0"
+  @version "1.3.0"
 
   def project do
     [
@@ -20,6 +20,28 @@ defmodule AshPhoenixGenApi.MixProject do
       aliases: aliases(),
       docs: &docs/0,
       package: package(),
+      test_coverage: [
+        # Compile-time-only modules (macros, protocol impls for test fixtures)
+        # have no meaningful runtime coverage.
+        ignore_modules: [
+          ~r/^Inspect\.AshPhoenixGenApi\./,
+          # Compile-time-only macro module
+          AshPhoenixGenApi.Resource.EffectiveField,
+          # Spark DSL schema/entity modules — dominated by framework-injected code
+          AshPhoenixGenApi.Resource.GenApi.Action,
+          AshPhoenixGenApi.Resource.GenApi.Mfa,
+          AshPhoenixGenApi.Resource.GenApi.Options,
+          AshPhoenixGenApi.Domain.GenApi.Options,
+          # DSL fixtures whose executable content is entirely compile-time
+          AshPhoenixGenApi.InfoFixtures.PlainDomain,
+          AshPhoenixGenApi.InfoFixtures.DisabledSupporterDomain,
+          AshPhoenixGenApi.InfoFixtures.EmptyGenApiResource,
+          AshPhoenixGenApi.InfoFixtures.MfaWithCallbackResource,
+          AshPhoenixGenApi.InfoFixtures.Hooks,
+          AshPhoenixGenApi.InfoFixtures.AcceptListResource
+        ],
+        summary: [threshold: 88]
+      ],
       source_url: "https://github.com/ohhi-vn/ash_phoenix_gen_api",
       homepage_url: "https://github.com/ohhi-vn/ash_phoenix_gen_api",
       usage_rules: usage_rules(),
@@ -38,9 +60,9 @@ defmodule AshPhoenixGenApi.MixProject do
 
   defp deps do
     [
-      {:ash, ash_version("~> 3.29")},
+      {:ash, ash_version("~> 3.32")},
       {:spark, "~> 2.7"},
-      {:phoenix_gen_api, "~> 2.22"},
+      {:phoenix_gen_api, "~> 2.23"},
       # Dev/Test
       {:igniter, "~> 0.7", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.40", only: [:dev, :test], runtime: false},
@@ -134,7 +156,11 @@ defmodule AshPhoenixGenApi.MixProject do
       "spark.cheat_sheets":
         "spark.cheat_sheets --extensions AshPhoenixGenApi.Resource,AshPhoenixGenApi.Domain",
       "spark.cheat_sheets_in_search":
-        "spark.cheat_sheets_in_search --extensions AshPhoenixGenApi.Resource,AshPhoenixGenApi.Domain"
+        "spark.cheat_sheets_in_search --extensions AshPhoenixGenApi.Resource,AshPhoenixGenApi.Domain",
+      # Testing & Coverage
+      coveralls: ["test --cover", "coveralls.html"],
+      # Code Quality
+      quality: ["format --check-formatted", "credo --strict", "dialyzer"]
     ]
   end
 

@@ -4,6 +4,7 @@ defmodule AshPhoenixGenApi.Resource.HookConfigTest do
   @moduletag timeout: 60_000
 
   alias AshPhoenixGenApi.Resource.ActionConfig
+  alias AshPhoenixGenApi.Resource.Info
   alias AshPhoenixGenApi.Resource.MfaConfig
 
   defmodule TestHookModule do
@@ -179,7 +180,7 @@ defmodule AshPhoenixGenApi.Resource.HookConfigTest do
 
   describe "section-level hooks in FunConfig" do
     test "section-level before_execute flows to all action FunConfigs" do
-      fun_configs = AshPhoenixGenApi.Resource.Info.fun_configs(SectionHookResource)
+      fun_configs = Info.fun_configs(SectionHookResource)
 
       for config <- fun_configs do
         assert config.before_execute == {TestHookModule, :before_hook}
@@ -187,7 +188,7 @@ defmodule AshPhoenixGenApi.Resource.HookConfigTest do
     end
 
     test "section-level after_execute flows to all action FunConfigs" do
-      fun_configs = AshPhoenixGenApi.Resource.Info.fun_configs(SectionHookResource)
+      fun_configs = Info.fun_configs(SectionHookResource)
 
       for config <- fun_configs do
         assert config.after_execute == {TestHookModule, :after_hook}
@@ -195,7 +196,7 @@ defmodule AshPhoenixGenApi.Resource.HookConfigTest do
     end
 
     test "section-level hook_timeout flows to all action FunConfigs" do
-      fun_configs = AshPhoenixGenApi.Resource.Info.fun_configs(SectionHookResource)
+      fun_configs = Info.fun_configs(SectionHookResource)
 
       for config <- fun_configs do
         assert config.hook_timeout == 10_000
@@ -232,7 +233,7 @@ defmodule AshPhoenixGenApi.Resource.HookConfigTest do
         end
       end
 
-      fun_configs = AshPhoenixGenApi.Resource.Info.fun_configs(NoHookResource)
+      fun_configs = Info.fun_configs(NoHookResource)
       config = Enum.find(fun_configs, &(&1.request_type == "create_no_hook"))
 
       assert config.before_execute == nil
@@ -295,7 +296,7 @@ defmodule AshPhoenixGenApi.Resource.HookConfigTest do
 
   describe "action-level hook overrides in FunConfig" do
     test "action-level before_execute overrides section-level" do
-      fun_configs = AshPhoenixGenApi.Resource.Info.fun_configs(ActionHookOverrideResource)
+      fun_configs = Info.fun_configs(ActionHookOverrideResource)
       create_config = Enum.find(fun_configs, &(&1.request_type == "create_override"))
       read_config = Enum.find(fun_configs, &(&1.request_type == "read_inherit"))
 
@@ -304,7 +305,7 @@ defmodule AshPhoenixGenApi.Resource.HookConfigTest do
     end
 
     test "action-level after_execute overrides section-level" do
-      fun_configs = AshPhoenixGenApi.Resource.Info.fun_configs(ActionHookOverrideResource)
+      fun_configs = Info.fun_configs(ActionHookOverrideResource)
       create_config = Enum.find(fun_configs, &(&1.request_type == "create_override"))
       read_config = Enum.find(fun_configs, &(&1.request_type == "read_inherit"))
 
@@ -313,7 +314,7 @@ defmodule AshPhoenixGenApi.Resource.HookConfigTest do
     end
 
     test "action-level hook_timeout overrides section-level" do
-      fun_configs = AshPhoenixGenApi.Resource.Info.fun_configs(ActionHookOverrideResource)
+      fun_configs = Info.fun_configs(ActionHookOverrideResource)
       create_config = Enum.find(fun_configs, &(&1.request_type == "create_override"))
       read_config = Enum.find(fun_configs, &(&1.request_type == "read_inherit"))
 
@@ -370,7 +371,7 @@ defmodule AshPhoenixGenApi.Resource.HookConfigTest do
 
   describe "MFA entity hooks in FunConfig" do
     test "MFA entity inherits section-level hooks" do
-      fun_configs = AshPhoenixGenApi.Resource.Info.fun_configs(MfaHookResource)
+      fun_configs = Info.fun_configs(MfaHookResource)
       ping_config = Enum.find(fun_configs, &(&1.request_type == "ping"))
 
       assert ping_config.before_execute == {TestHookModule, :before_hook}
@@ -379,7 +380,7 @@ defmodule AshPhoenixGenApi.Resource.HookConfigTest do
     end
 
     test "MFA entity can override section-level hooks" do
-      fun_configs = AshPhoenixGenApi.Resource.Info.fun_configs(MfaHookResource)
+      fun_configs = Info.fun_configs(MfaHookResource)
       ping_config = Enum.find(fun_configs, &(&1.request_type == "ping_with_hooks"))
 
       assert ping_config.before_execute == {TestHookModule, :custom_before, [:mfa_extra]}
@@ -394,63 +395,63 @@ defmodule AshPhoenixGenApi.Resource.HookConfigTest do
 
   describe "introspection helpers" do
     test "gen_api_before_execute returns section-level setting" do
-      assert AshPhoenixGenApi.Resource.Info.gen_api_before_execute(SectionHookResource) ==
+      assert Info.gen_api_before_execute(SectionHookResource) ==
                {:ok, {TestHookModule, :before_hook}}
     end
 
     test "gen_api_after_execute returns section-level setting" do
-      assert AshPhoenixGenApi.Resource.Info.gen_api_after_execute(SectionHookResource) ==
+      assert Info.gen_api_after_execute(SectionHookResource) ==
                {:ok, {TestHookModule, :after_hook}}
     end
 
     test "gen_api_hook_timeout returns section-level setting" do
-      assert AshPhoenixGenApi.Resource.Info.gen_api_hook_timeout(SectionHookResource) == {:ok, 10_000}
+      assert Info.gen_api_hook_timeout(SectionHookResource) == {:ok, 10_000}
     end
 
     test "effective_before_execute resolves action-level override" do
-      assert AshPhoenixGenApi.Resource.Info.effective_before_execute(
+      assert Info.effective_before_execute(
                ActionHookOverrideResource,
                :create
              ) == {TestHookModule, :custom_before, [:create_extra]}
     end
 
     test "effective_before_execute falls back to section-level" do
-      assert AshPhoenixGenApi.Resource.Info.effective_before_execute(
+      assert Info.effective_before_execute(
                ActionHookOverrideResource,
                :read
              ) == {TestHookModule, :before_hook}
     end
 
     test "effective_after_execute resolves action-level override" do
-      assert AshPhoenixGenApi.Resource.Info.effective_after_execute(
+      assert Info.effective_after_execute(
                ActionHookOverrideResource,
                :create
              ) == {TestHookModule, :custom_after, [:create_extra]}
     end
 
     test "effective_after_execute falls back to section-level" do
-      assert AshPhoenixGenApi.Resource.Info.effective_after_execute(
+      assert Info.effective_after_execute(
                ActionHookOverrideResource,
                :read
              ) == {TestHookModule, :after_hook}
     end
 
     test "effective_hook_timeout resolves action-level override" do
-      assert AshPhoenixGenApi.Resource.Info.effective_hook_timeout(
+      assert Info.effective_hook_timeout(
                ActionHookOverrideResource,
                :create
              ) == 20_000
     end
 
     test "effective_hook_timeout falls back to section-level" do
-      assert AshPhoenixGenApi.Resource.Info.effective_hook_timeout(
+      assert Info.effective_hook_timeout(
                ActionHookOverrideResource,
                :read
              ) == 10_000
     end
 
     test "effective_before_execute returns section default for nonexistent action" do
-      assert AshPhoenixGenApi.Resource.Info.effective_before_execute(
+      assert Info.effective_before_execute(
                SectionHookResource,
                :nonexistent
              ) == {TestHookModule, :before_hook}

@@ -1,10 +1,7 @@
-
-
 defmodule AshPhoenixGenApi.Resource.ResultEncoderCustomMfaTest do
   use ExUnit.Case
 
   @moduletag timeout: 60_000
-
 
   defmodule MyEncoder do
     def to_json(value) when is_list(value) do

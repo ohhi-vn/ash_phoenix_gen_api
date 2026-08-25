@@ -1,9 +1,10 @@
-
 defmodule AshPhoenixGenApi.ResourceMinimalTest do
   use ExUnit.Case
 
   @moduletag timeout: 60_000
 
+  alias AshPhoenixGenApi.Resource.ActionConfig
+  alias AshPhoenixGenApi.Resource.Info
 
   defmodule MinimalResource do
     use Ash.Resource,
@@ -31,27 +32,27 @@ defmodule AshPhoenixGenApi.ResourceMinimalTest do
 
   describe "minimal resource config" do
     test "compiles with minimal gen_api config" do
-      assert AshPhoenixGenApi.Resource.Info.has_gen_api?(MinimalResource) == true
+      assert Info.has_gen_api?(MinimalResource) == true
     end
 
     test "uses defaults for unspecified options" do
-      assert AshPhoenixGenApi.Resource.Info.gen_api_timeout!(MinimalResource) == 5_000
-      assert AshPhoenixGenApi.Resource.Info.gen_api_response_type!(MinimalResource) == :async
-      assert AshPhoenixGenApi.Resource.Info.gen_api_request_info!(MinimalResource) == true
-      assert AshPhoenixGenApi.Resource.Info.gen_api_check_permission!(MinimalResource) == false
-      assert AshPhoenixGenApi.Resource.Info.gen_api_choose_node_mode!(MinimalResource) == :random
-      assert AshPhoenixGenApi.Resource.Info.gen_api_nodes!(MinimalResource) == :local
-      assert AshPhoenixGenApi.Resource.Info.gen_api_version!(MinimalResource) == "0.0.1"
+      assert Info.gen_api_timeout!(MinimalResource) == 5_000
+      assert Info.gen_api_response_type!(MinimalResource) == :async
+      assert Info.gen_api_request_info!(MinimalResource) == true
+      assert Info.gen_api_check_permission!(MinimalResource) == false
+      assert Info.gen_api_choose_node_mode!(MinimalResource) == :random
+      assert Info.gen_api_nodes!(MinimalResource) == :local
+      assert Info.gen_api_version!(MinimalResource) == "0.0.1"
     end
 
     test "auto-derives request_type from action name" do
-      action_config = AshPhoenixGenApi.Resource.Info.action(MinimalResource, :create)
+      action_config = Info.action(MinimalResource, :create)
       assert action_config != nil
-      assert AshPhoenixGenApi.Resource.ActionConfig.effective_request_type(action_config) == "create"
+      assert ActionConfig.effective_request_type(action_config) == "create"
     end
 
     test "generates fun_config with defaults" do
-      fc = AshPhoenixGenApi.Resource.Info.fun_config(MinimalResource, "create")
+      fc = Info.fun_config(MinimalResource, "create")
       assert fc != nil
       assert fc.request_type == "create"
       assert fc.service == "minimal"

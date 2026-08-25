@@ -8,29 +8,22 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyDomainConfig do
   1. **Supporter module name** — The `supporter_module` must be a valid Elixir
      module name (atom).
 
-  2. **Service configuration** — When `define_supporter?` is `true`, the `service`
-     must be configured.
-
-  3. **Resource consistency** — All resources in the domain that have the
+  2. **Resource service consistency** — All resources in the domain that have the
      `AshPhoenixGenApi.Resource` extension must also have a `service` configured
      in their `gen_api` section. If a resource doesn't have its own `service`,
      the domain's `service` will be used as a fallback, so the domain must have
      one in that case.
 
-  4. **Request type uniqueness across resources** — No two resources in the
+  3. **Request type uniqueness across resources** — No two resources in the
      domain may expose the same `request_type` string. This prevents routing
      conflicts on the gateway node.
 
-  5. **Supporter module not already defined** — When `define_supporter?` is
-     `true`, warns if the supporter module already exists (which could indicate
-     a conflict with a manually-defined module).
-
-  6. **Push nodes configuration** — When `push_nodes` is configured, validates
+  4. **Push nodes configuration** — When `push_nodes` is configured, validates
      that it is either a list of atom node names, an MFA tuple
      `{module, function, args}`, `:local`, or `nil`. Lists must contain only
      atoms, and MFA tuples must have the correct structure.
 
-  7. **Permission callback configuration** — When `permission_callback` is
+  5. **Permission callback configuration** — When `permission_callback` is
      configured, validates that it is either a valid MFA tuple
      `{module, function, args}` or `nil`. MFA tuples must have the correct
      structure (module and function must be atoms, args must be a list).
@@ -43,34 +36,32 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyDomainConfig do
 
   use Spark.Dsl.Verifier
 
+  alias Ash.Domain.Info, as: DomainInfo
+  alias Ash.Resource.Info, as: ResourceAshInfo
+  alias AshPhoenixGenApi.Domain.Info
+  alias AshPhoenixGenApi.Resource.ActionConfig, as: ActionConfig
+  alias AshPhoenixGenApi.Resource.Info, as: ResourceInfo
+  alias AshPhoenixGenApi.Utils
+  alias Spark.Dsl.Extension
   alias Spark.Dsl.Verifier, as: SparkVerifier
   alias Spark.Error.DslError, as: SparkDslError
-  alias Ash.Domain.Info, as: DomainInfo
-  alias AshPhoenixGenApi.Domain.Info
-  alias AshPhoenixGenApi.Resource.Info, as: ResourceInfo
-  alias Ash.Resource.Info, as: ResourceAshInfo
-  alias AshPhoenixGenApi.Resource.ActionConfig, as: ActionConfig
 
   @impl true
   def verify(dsl_state) do
     domain = SparkVerifier.get_persisted(dsl_state, :module)
 
     # Check if gen_api is configured on this domain
-    supporter_module = extract_opt(Info.gen_api_supporter_module(dsl_state), nil)
+    supporter_module = Utils.extract_opt(Info.gen_api_supporter_module(dsl_state), nil)
 
     if is_nil(supporter_module) do
       # No gen_api configured — nothing to verify
       :ok
     else
-      define_supporter? = extract_opt(Info.gen_api_define_supporter?(dsl_state), true)
-
       with :ok <- verify_supporter_module(domain, supporter_module),
-           :ok <- verify_service_config(dsl_state, domain, define_supporter?),
            :ok <- verify_push_nodes(dsl_state, domain),
            :ok <- verify_permission_callback(dsl_state, domain),
-           :ok <- verify_resource_services(dsl_state, domain),
-           :ok <- verify_request_type_uniqueness(dsl_state, domain) do
-        :ok
+           :ok <- verify_resource_services(dsl_state, domain) do
+        verify_request_type_uniqueness(dsl_state, domain)
       end
     end
   end
@@ -139,7 +130,7 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyDomainConfig do
   # ---------------------------------------------------------------------------
 
   defp verify_push_nodes(dsl_state, domain) do
-    push_nodes = extract_opt(Info.gen_api_push_nodes(dsl_state), nil)
+    push_nodes = Utils.extract_opt(Info.gen_api_push_nodes(dsl_state), nil)
     verify_push_nodes_value(push_nodes, domain)
   end
 
@@ -173,10 +164,10 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyDomainConfig do
   end
 
   defp verify_push_nodes_value({mod, fun, args}, domain) do
-    if is_atom(mod) and is_atom(fun) and is_list(args) do
+    if Utils.valid_mfa?({mod, fun, args}) do
       :ok
     else
-      errors = build_mfa_error_parts(mod, fun, args)
+      errors = Utils.mfa_errors({mod, fun, args})
 
       raise SparkDslError,
         module: domain,
@@ -215,17 +206,17 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyDomainConfig do
   # ---------------------------------------------------------------------------
 
   defp verify_permission_callback(dsl_state, domain) do
-    permission_callback = extract_opt(Info.gen_api_permission_callback(dsl_state), nil)
+    permission_callback = Utils.extract_opt(Info.gen_api_permission_callback(dsl_state), nil)
     verify_permission_callback_value(permission_callback, domain)
   end
 
   defp verify_permission_callback_value(nil, _domain), do: :ok
 
   defp verify_permission_callback_value({mod, fun, args}, domain) do
-    if is_atom(mod) and is_atom(fun) and is_list(args) do
+    if Utils.valid_mfa?({mod, fun, args}) do
       :ok
     else
-      errors = build_mfa_error_parts(mod, fun, args)
+      errors = Utils.mfa_errors({mod, fun, args})
 
       raise SparkDslError,
         module: domain,
@@ -257,57 +248,12 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyDomainConfig do
       """
   end
 
-  defp build_mfa_error_parts(mod, fun, args) do
-    errors = []
-
-    errors =
-      if not is_atom(mod) do
-        errors ++ ["  Module must be an atom, got: #{inspect(mod)}"]
-      else
-        errors
-      end
-
-    errors =
-      if not is_atom(fun) do
-        errors ++ ["  Function must be an atom, got: #{inspect(fun)}"]
-      else
-        errors
-      end
-
-    errors =
-      if not is_list(args) do
-        errors ++ ["  Args must be a list, got: #{inspect(args)}"]
-      else
-        errors
-      end
-
-    errors
-  end
-
-  # ---------------------------------------------------------------------------
-  # Service configuration verification
-  # ---------------------------------------------------------------------------
-
-  defp verify_service_config(dsl_state, _domain, define_supporter?) do
-    service = extract_opt(Info.gen_api_service(dsl_state), nil)
-
-    if define_supporter? and is_nil(service) do
-      # When define_supporter? is true, we need a service name for the
-      # generated FunConfigs. However, resources can provide their own service
-      # names, so this is a warning rather than an error.
-      # We still allow it but resources MUST have their own service configured.
-      :ok
-    else
-      :ok
-    end
-  end
-
   # ---------------------------------------------------------------------------
   # Resource service verification
   # ---------------------------------------------------------------------------
 
   defp verify_resource_services(dsl_state, domain) do
-    domain_service = extract_opt(Info.gen_api_service(dsl_state), nil)
+    domain_service = Utils.extract_opt(Info.gen_api_service(dsl_state), nil)
 
     resources_with_gen_api =
       domain
@@ -322,15 +268,17 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyDomainConfig do
     errors =
       resources_with_gen_api
       |> Enum.flat_map(fn resource ->
-        resource_service = extract_opt(ResourceInfo.gen_api_service(resource), nil)
+        resource_service = Utils.extract_opt(ResourceInfo.gen_api_service(resource), nil)
 
         if is_nil(resource_service) and is_nil(domain_service) do
           # Try to find the resource's gen_api section annotation for better debugging
           resource_anno = get_resource_gen_api_anno(resource)
-          source_info = format_source_location(resource_anno)
+          source_info = Utils.format_source_location(resource_anno)
 
           [
-            "No service configured for `#{inspect(resource)}`." <> source_info <> "\n" <>
+            "No service configured for `#{inspect(resource)}`." <>
+              source_info <>
+              "\n" <>
               "Set `service` in the resource's `gen_api` block, e.g.:\n" <>
               "  gen_api do\n" <>
               "    service \"my_service\"\n" <>
@@ -394,11 +342,9 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyDomainConfig do
       |> Enum.filter(fn {_request_type, occurrences} -> length(occurrences) > 1 end)
       |> Enum.map(fn {request_type, occurrences} ->
         details =
-          occurrences
-          |> Enum.map(fn {_rt, resource, action_name} ->
+          Enum.map_join(occurrences, "\n", fn {_rt, resource, action_name} ->
             "  - `#{inspect(resource)}` action `:#{action_name}`"
           end)
-          |> Enum.join("\n")
 
         "The request_type `#{request_type}` is used by multiple actions:\n#{details}\n" <>
           "Each request_type must be unique across all resources in the domain."
@@ -424,42 +370,9 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyDomainConfig do
 
   @doc false
   defp get_resource_gen_api_anno(resource) do
-    try do
-      dsl_state = resource.spark_dsl_config()
-      Spark.Dsl.Extension.get_section_anno(dsl_state, [:gen_api])
-    rescue
-      _ -> nil
-    end
+    dsl_state = resource.spark_dsl_config()
+    Extension.get_section_anno(dsl_state, [:gen_api])
+  rescue
+    _ -> nil
   end
-
-  @doc false
-  defp format_source_location(nil), do: ""
-
-  defp format_source_location(anno) when is_tuple(anno) do
-    line = :erl_anno.location(anno)
-    file = :erl_anno.file(anno)
-
-    source_file =
-      case file do
-        :undefined -> ""
-        charlist -> " (source: #{Path.relative_to_cwd(to_string(charlist))}:#{line})"
-      end
-
-    "\n  Defined at#{source_file}"
-  end
-
-  # ---------------------------------------------------------------------------
-  # Private helpers
-  # ---------------------------------------------------------------------------
-
-  # Extracts a value from a Spark.InfoGenerator result.
-  # Spark.InfoGenerator generates two versions of each accessor:
-  # - `gen_api_foo/1` returns `{:ok, value}` or `:error`
-  # - `gen_api_foo!/1` returns the value or raises
-  #
-  # This helper unwraps the `{:ok, value}` tuple, falling back to the
-  # provided default when the option is not configured (`:error`).
-  defp extract_opt({:ok, value}, _default), do: value
-  defp extract_opt(:error, default), do: default
-  defp extract_opt(value, _default) when not is_tuple(value), do: value
 end
