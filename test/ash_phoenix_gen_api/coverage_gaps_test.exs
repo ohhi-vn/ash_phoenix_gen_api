@@ -19,7 +19,7 @@ defmodule AshPhoenixGenApi.CoverageGapsTest do
     end
 
     test "version/0 returns the mix project version" do
-      assert AshPhoenixGenApi.version() == "1.3.0"
+      assert AshPhoenixGenApi.version() == "1.3.1"
     end
   end
 

@@ -420,9 +420,18 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
       # Auto-derive from the Ash action definition — arg_orders defaults to :map
       true ->
         {arg_types, _arg_orders} = auto_derive_arg_config(resource, action_config.name, dsl_state)
-        {arg_types, :map}
+        derived_arg_config(arg_types)
     end
   end
+
+  # Actions with no inputs (e.g. update actions that accept no attributes
+  # and declare no arguments). FunConfig rejects empty arg_types paired
+  # with a non-empty arg_orders, and ArgumentHandler ignores arg_orders
+  # when arg_types is empty (convert_args!/2 returns []), so [] is both
+  # valid and behaviorally identical.
+  defp derived_arg_config(arg_types) when map_size(arg_types) == 0, do: {%{}, []}
+
+  defp derived_arg_config(arg_types), do: {arg_types, :map}
 
   # Auto-derives arg_types and arg_orders from an Ash resource action.
   #

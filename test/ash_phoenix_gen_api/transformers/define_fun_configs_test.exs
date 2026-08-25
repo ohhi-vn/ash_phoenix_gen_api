@@ -1,6 +1,8 @@
 defmodule AshPhoenixGenApi.Transformers.DefineFunConfigsTest do
   use ExUnit.Case
 
+  alias PhoenixGenApi.Structs.FunConfig
+
   @moduletag timeout: 60_000
 
   defmodule TestResource do
@@ -28,6 +30,31 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigsTest do
 
       action :create do
         request_type "create_thing"
+      end
+    end
+  end
+
+  defmodule NoInputResource do
+    use Ash.Resource,
+      domain: nil,
+      extensions: [AshPhoenixGenApi.Resource]
+
+    attributes do
+      uuid_primary_key(:id)
+      attribute(:name, :string, allow_nil?: false)
+    end
+
+    actions do
+      update :touch do
+        # No accepted attributes and no arguments — auto-derivation yields no inputs.
+      end
+    end
+
+    gen_api do
+      service "no_input_service"
+
+      action :touch do
+        request_type "touch_thing"
       end
     end
   end
@@ -67,6 +94,24 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigsTest do
       create_config = Enum.find(configs, &(&1.request_type == "create_thing"))
       assert is_map(create_config.arg_types)
       assert Map.has_key?(create_config.arg_types, "name")
+    end
+  end
+
+  describe "auto-derived config for actions with no inputs" do
+    test "arg_orders is [] instead of :map when arg_types is empty" do
+      configs = NoInputResource.__ash_phoenix_gen_api_fun_configs__()
+      touch_config = Enum.find(configs, &(&1.request_type == "touch_thing"))
+      assert touch_config != nil
+      assert touch_config.arg_types == %{}
+      assert touch_config.arg_orders == []
+    end
+
+    test "generated FunConfig passes PhoenixGenApi FunConfig validation" do
+      configs = NoInputResource.__ash_phoenix_gen_api_fun_configs__()
+      touch_config = Enum.find(configs, &(&1.request_type == "touch_thing"))
+
+      assert FunConfig.valid?(touch_config)
+      assert {:ok, ^touch_config} = FunConfig.validate_with_details(touch_config)
     end
   end
 end

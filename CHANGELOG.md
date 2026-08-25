@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2026-08-25
+
+### Fixed
+- Fixed invalid FunConfig generation for Ash actions with no inputs (e.g. update actions
+  that accept no attributes and declare no arguments): auto-derivation now yields
+  `arg_orders: []` instead of `:map`, which `PhoenixGenApi.Structs.FunConfig` validation
+  rejects when `arg_types` is empty ("arg_types is empty but arg_orders is not")
+
 ## [1.3.0] - 2026-08-25
 
 ### Added
