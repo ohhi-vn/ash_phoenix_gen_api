@@ -63,6 +63,54 @@ defmodule AshPhoenixGenApi.Codec do
           :struct
           | :map
           | {module(), atom(), [any()]}
+          | nil
+
+  @doc """
+  Translates a result encoder mode into a concrete encoder MFA for a FunConfig.
+
+  Used when generating FunConfigs for `mfa` endpoints: the phoenix_gen_api
+  runtime applies the returned MFA to the endpoint's return value
+  (`apply(mod, fun, [result | args])`).
+
+  ## Translation
+
+  - `:struct` — `nil` (no encoder; result passes through unchanged)
+  - `:map` — `{AshPhoenixGenApi.Codec, :encode_result, [:map]}`, which converts
+    `{:ok, data}` to `{:ok, encoded_data}` and passes `{:error, reason}`
+    through unchanged
+  - a valid custom `{module, function, args}` MFA — returned verbatim
+  - `nil` — `nil`
+
+  ## Examples
+
+      iex> AshPhoenixGenApi.Codec.fun_config_encoder(:struct)
+      nil
+
+      iex> AshPhoenixGenApi.Codec.fun_config_encoder(:map)
+      {AshPhoenixGenApi.Codec, :encode_result, [:map]}
+
+      iex> AshPhoenixGenApi.Codec.fun_config_encoder({MyEncoder, :encode, []})
+      {MyEncoder, :encode, []}
+
+      iex> AshPhoenixGenApi.Codec.fun_config_encoder(nil)
+      nil
+  """
+  @spec fun_config_encoder(result_encoder()) ::
+          nil | {module(), atom(), [any()]}
+  def fun_config_encoder(:struct), do: nil
+  def fun_config_encoder(:map), do: {__MODULE__, :encode_result, [:map]}
+
+  def fun_config_encoder({mod, fun, args} = mfa)
+      when is_atom(mod) and is_atom(fun) and is_list(args),
+      do: mfa
+
+  def fun_config_encoder(nil), do: nil
+
+  # Unknown values pass through as no encoder here so that the verifier can
+  # reject them with a proper DslError naming the value (the transformer runs
+  # before verifiers, and the intermediate FunConfig never reaches a compiled
+  # module when validation fails).
+  def fun_config_encoder(_other), do: nil
 
   @doc """
   Encodes the result of an Ash action call that returns an ok/error tuple.

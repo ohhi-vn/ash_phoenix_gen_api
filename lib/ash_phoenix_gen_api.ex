@@ -101,6 +101,27 @@ defmodule AshPhoenixGenApi do
 
   See `AshPhoenixGenApi.TypeMapper` for the complete mapping table.
 
+  ## Result Encoding
+
+  Both `action` and `mfa` endpoints support a `result_encoder` option
+  (`:struct`, `:map`, or a custom `{Module, :function, args}` MFA), resolved with
+  mfa/action-level value first, then the `gen_api` section-level default (`:struct`).
+
+  - `action` endpoints — the encoder is baked into the generated code interface
+    functions (`AshPhoenixGenApi.Codec.encode_result/encode_value`). For `:map`,
+    Ash resource structs become maps of public fields only; lists are converted
+    element-wise.
+  - `mfa` endpoints — the encoder is stored on the generated `FunConfig` as a
+    concrete MFA (`AshPhoenixGenApi.Codec.fun_config_encoder/1`), and the
+    phoenix_gen_api runtime applies it to the endpoint's return value after the
+    MFA call: `apply(mod, fun, [result | args])`. The return format is preserved:
+    `{:ok, data}` becomes `{:ok, encoded_data}`, `{:error, reason}` passes through
+    unchanged. `:struct` means pass-through (no encoder is stored).
+
+  Runtime application for `mfa` endpoints requires a phoenix_gen_api version that
+  supports the `FunConfig` `result_encoder` field; with older versions the option
+  is validated and stored but has no runtime effect.
+
   ## Modules
 
   - `AshPhoenixGenApi.Resource` — Resource-level DSL extension

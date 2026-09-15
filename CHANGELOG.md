@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-09-15
+
+### Added
+- `result_encoder` support for `mfa` endpoints via a new `result_encoder` option on
+  `gen_api` mfa entities: `:struct` (pass-through), `:map` (convert Ash resource
+  structs to maps of public fields, preserving the `{:ok, data}` / `{:error, reason}`
+  return format), or a custom `{Module, :function, args}` encoder MFA. When `nil`,
+  inherits from the `gen_api` section-level default (`:struct`)
+- Generated `FunConfig`s for mfa endpoints now carry a concrete encoder MFA
+  (`AshPhoenixGenApi.Codec.fun_config_encoder/1`) applied by the phoenix_gen_api
+  runtime after the MFA call; requires phoenix_gen_api >= 2.24 (older versions
+  validate and store the option with no runtime effect)
+- `AshPhoenixGenApi.Resource.MfaConfig.effective_result_encoder/2` for resolving the
+  effective encoder with section-level fallback
+- Verifier validation for `result_encoder` on both `action` and `mfa` entities, with
+  descriptive `DslError` messages and source locations for invalid values
+
+### Changed
+- Bumped `phoenix_gen_api` dependency to `~> 2.24` to pick up `FunConfig`
+  `result_encoder` runtime support
+
 ## [1.3.1] - 2026-08-25
 
 ### Fixed

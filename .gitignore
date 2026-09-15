@@ -27,3 +27,5 @@ ash_phoenix_gen_api-*.tar
 .claude/
 .DS_Store
 mise.toml
+._*
+.opencode

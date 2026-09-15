@@ -139,6 +139,7 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
   alias Ash.Changeset
   alias Ash.Query
   alias Ash.Resource.Info, as: ResourceAshInfo
+  alias AshPhoenixGenApi.Codec
   alias AshPhoenixGenApi.Resource.ActionConfig
   alias AshPhoenixGenApi.Resource.Info
   alias AshPhoenixGenApi.Resource.MfaConfig
@@ -391,8 +392,23 @@ defmodule AshPhoenixGenApi.Transformers.DefineFunConfigs do
         MfaConfig.effective_before_execute(mfa_config, section_defaults.before_execute),
       after_execute:
         MfaConfig.effective_after_execute(mfa_config, section_defaults.after_execute),
-      hook_timeout: MfaConfig.effective_hook_timeout(mfa_config, section_defaults.hook_timeout)
+      hook_timeout: MfaConfig.effective_hook_timeout(mfa_config, section_defaults.hook_timeout),
+      result_encoder: mfa_result_encoder(mfa_config, section_defaults)
     }
+  end
+
+  # Resolves the result encoder for an mfa endpoint and translates the codec
+  # mode into a concrete encoder MFA for the FunConfig (`:struct` → `nil`,
+  # `:map` → `{Codec, :encode_result, [:map]}`, custom MFA → verbatim).
+  #
+  # Stored on the generated FunConfig; the phoenix_gen_api runtime applies it
+  # to the MFA's return value after the call, preserving the return format
+  # (`{:ok, data}` becomes `{:ok, encoded_data}`, `{:error, reason}` unchanged).
+  @doc false
+  def mfa_result_encoder(mfa_config, section_defaults) do
+    Codec.fun_config_encoder(
+      MfaConfig.effective_result_encoder(mfa_config, section_defaults.result_encoder)
+    )
   end
 
   # Resolves arg_types and arg_orders for a FunConfig.

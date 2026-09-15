@@ -28,6 +28,7 @@ defmodule AshPhoenixGenApi.Resource.MfaConfig do
   - `retry` - Retry configuration
   - `version` - API version string
   - `disabled` - Whether this endpoint is disabled
+  - `result_encoder` - How to encode the result returned from the MFA call
 
   ## Resolution Order
 
@@ -51,6 +52,7 @@ defmodule AshPhoenixGenApi.Resource.MfaConfig do
   @type retry_config :: SharedTypes.retry_config()
   @type gen_api_type :: SharedTypes.gen_api_type()
   @type hook_config :: SharedTypes.hook_config()
+  @type result_encoder :: SharedTypes.result_encoder()
 
   @doc """
   Callback function signature for permission checking.
@@ -82,6 +84,7 @@ defmodule AshPhoenixGenApi.Resource.MfaConfig do
           before_execute: hook_config(),
           after_execute: hook_config(),
           hook_timeout: pos_integer() | nil,
+          result_encoder: result_encoder(),
           __spark_metadata__: any()
         }
 
@@ -104,8 +107,45 @@ defmodule AshPhoenixGenApi.Resource.MfaConfig do
     before_execute: nil,
     after_execute: nil,
     hook_timeout: nil,
+    result_encoder: nil,
     __spark_metadata__: nil
   ]
+
+  @doc """
+  Resolves the effective result_encoder setting, falling back to the provided default.
+
+  The `result_encoder` determines how the result from the MFA call is encoded:
+
+  - `:struct` — Return the result as-is (pass-through, no encoding)
+  - `:map` — Convert Ash resource structs in the result to maps containing only
+    public fields, preserving the `{:ok, data}` / `{:error, reason}` return format
+  - `{Module, :function, args}` — Custom encoder MFA. The function receives
+    the result as its first argument, followed by `args`, and must return
+    the encoded result.
+  - `nil` — Inherit from the section-level default
+
+  When the mfa-level `result_encoder` is explicitly set (not `nil`), returns that value.
+  Otherwise, returns the section-level default.
+
+  ## Examples
+
+      iex> config = %AshPhoenixGenApi.Resource.MfaConfig{result_encoder: :map}
+      iex> AshPhoenixGenApi.Resource.MfaConfig.effective_result_encoder(config, :struct)
+      :map
+
+      iex> config = %AshPhoenixGenApi.Resource.MfaConfig{result_encoder: nil}
+      iex> AshPhoenixGenApi.Resource.MfaConfig.effective_result_encoder(config, :struct)
+      :struct
+
+      iex> config = %AshPhoenixGenApi.Resource.MfaConfig{result_encoder: {MyEncoder, :encode, []}}
+      iex> AshPhoenixGenApi.Resource.MfaConfig.effective_result_encoder(config, :struct)
+      {MyEncoder, :encode, []}
+  """
+  @spec effective_result_encoder(t(), result_encoder()) :: result_encoder()
+  def effective_result_encoder(%__MODULE__{result_encoder: nil}, default), do: default
+
+  def effective_result_encoder(%__MODULE__{result_encoder: result_encoder}, _default),
+    do: result_encoder
 
   use AshPhoenixGenApi.Resource.EffectiveField
 end

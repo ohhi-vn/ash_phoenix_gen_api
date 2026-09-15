@@ -5,7 +5,7 @@ defmodule AshPhoenixGenApi.MixProject do
   Ash extension for generating function configurations for PhoenixGenApi framework from Ash resources.
   """
 
-  @version "1.3.1"
+  @version "1.4.0"
 
   def project do
     [
@@ -62,7 +62,7 @@ defmodule AshPhoenixGenApi.MixProject do
     [
       {:ash, ash_version("~> 3.32")},
       {:spark, "~> 2.7"},
-      {:phoenix_gen_api, "~> 2.23"},
+      {:phoenix_gen_api, "~> 2.24"},
       # Dev/Test
       {:igniter, "~> 0.7", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.40", only: [:dev, :test], runtime: false},

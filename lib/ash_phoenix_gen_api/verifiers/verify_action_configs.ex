@@ -23,9 +23,13 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyActionConfigs do
      and args is a list. (Whether the module is loaded and the function exists
      is validated at runtime when the endpoint is invoked.)
 
-  6. **Permission callback validity** — When `permission_callback` is
-     provided, it must be a valid MFA tuple `{module, function, args}`
-     where module and function are atoms and args is a list, or `nil`.
+   6. **Permission callback validity** — When `permission_callback` is
+      provided, it must be a valid MFA tuple `{module, function, args}`
+      where module and function are atoms and args is a list, or `nil`.
+
+   7. **Result encoder validity** — When `result_encoder` is provided on an
+      `action` or `mfa` entity, it must be `:struct`, `:map`, a valid MFA
+      tuple `{module, function, args}`, or `nil`.
 
   ## Error Messages
 
@@ -59,7 +63,8 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyActionConfigs do
          :ok <- verify_request_type_uniqueness(resource, actions, mfas),
          :ok <- verify_arg_consistency(resource, actions, mfas),
          :ok <- verify_permission_args(dsl_state, resource, actions, mfas),
-         :ok <- verify_mfa_validity(resource, actions, mfas) do
+         :ok <- verify_mfa_validity(resource, actions, mfas),
+         :ok <- verify_result_encoders(resource, actions, mfas) do
       verify_permission_callbacks(resource, actions, mfas)
     end
   end
@@ -415,6 +420,56 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyActionConfigs do
             "#{type} `#{config.name}`: invalid MFA tuple `#{inspect(config.mfa)}`. " <>
               "Expected `{module, function, args_list}` where module and function are atoms " <>
               "and args is a list."
+          ]
+      end
+    end)
+  end
+
+  # ---------------------------------------------------------------------------
+  # Result encoder verification
+  # ---------------------------------------------------------------------------
+
+  defp verify_result_encoders(resource, actions, mfas) do
+    action_errors = check_result_encoder_for_items(actions, "Action")
+    mfa_errors = check_result_encoder_for_items(mfas, "MFA")
+    errors = action_errors ++ mfa_errors
+
+    if errors == [] do
+      :ok
+    else
+      raise Spark.Error.DslError,
+        module: resource,
+        path: [:gen_api],
+        message: """
+        Result encoder configuration errors:
+
+        #{Enum.join(errors, "\n\n")}
+        """
+    end
+  end
+
+  defp check_result_encoder_for_items(items, type) do
+    items
+    |> Enum.flat_map(fn config ->
+      cond do
+        # Not set — inherits the section default — always valid
+        is_nil(config.result_encoder) ->
+          []
+
+        config.result_encoder in [:struct, :map] ->
+          []
+
+        Utils.valid_mfa?(config.result_encoder) ->
+          []
+
+        true ->
+          location = get_entity_location(config)
+          source_info = Utils.format_source_location(location)
+
+          [
+            "#{type} `#{config.name}`: invalid result_encoder `#{inspect(config.result_encoder)}`. " <>
+              "Expected `:struct`, `:map`, `{Module, :function, args}` where Module and function " <>
+              "are atoms and args is a list, or `nil`." <> source_info
           ]
       end
     end)

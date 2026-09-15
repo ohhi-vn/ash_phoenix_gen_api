@@ -619,6 +619,35 @@ defmodule AshPhoenixGenApi.Resource do
         Per-hook timeout in milliseconds. Must be a positive integer.
         Defaults to the section-level `hook_timeout` (which defaults to `5000`).
         """
+      ],
+      result_encoder: [
+        type: :any,
+        default: nil,
+        doc: """
+        How to encode the result returned from the MFA function.
+
+        - `:struct` — Return the result as-is (pass-through, no encoding)
+        - `:map` — Convert Ash resource structs in the result to maps containing
+          only public fields. The MFA's return value must be `{:ok, data}`,
+          `{:error, reason}`, or `:ok`; the return format is preserved
+          (`{:ok, data}` becomes `{:ok, encoded_data}`). Lists are converted
+          element-wise. Non-Ash-resource structs fall back to `Map.from_struct/1`.
+          Encoding is top-level only: structs nested inside map values are not
+          converted.
+        - `{Module, :function, args}` — Custom encoder MFA. The function receives
+          the MFA's return value as its first argument, followed by `args`, and
+          must return the encoded result.
+
+        When `nil` (the default), inherits from the section-level `result_encoder`
+        setting (which defaults to `:struct`, i.e. no encoding).
+
+        The encoder is stored on the generated FunConfig and applied by the
+        phoenix_gen_api runtime after the MFA call. Runtime application requires
+        a phoenix_gen_api version that supports the FunConfig `result_encoder`
+        field; with older versions the option has no runtime effect.
+
+        Defaults to the `gen_api` section-level `result_encoder` (which defaults to `:struct`).
+        """
       ]
     ]
   }

@@ -47,6 +47,20 @@ defmodule AshPhoenixGenApi.Resource.SharedTypes do
 
   @type hook_config :: {module(), atom()} | {module(), atom(), [any()]} | nil
 
+  # How an endpoint's result is encoded.
+  #
+  # Used by both `action` and `mfa` entities:
+  #
+  # - `:struct` — return the result as-is (pass-through)
+  # - `:map` — convert Ash resource structs to maps of public fields;
+  #   for `mfa` endpoints the return format is preserved (`{:ok, data}`
+  #   becomes `{:ok, encoded_data}`, `{:error, reason}` passes through)
+  # - `{module(), atom(), [any()]}` — custom encoder MFA; the function
+  #   receives the result as its first argument, followed by the args
+  #
+  # For `action` endpoints the encoding is baked into generated code
+  # interface functions; for `mfa` endpoints it is stored on the generated
+  # FunConfig for the phoenix_gen_api runtime to apply.
   @type result_encoder ::
           :struct
           | :map

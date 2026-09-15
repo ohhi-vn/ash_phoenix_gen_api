@@ -19,7 +19,7 @@ defmodule AshPhoenixGenApi.CoverageGapsTest do
     end
 
     test "version/0 returns the mix project version" do
-      assert AshPhoenixGenApi.version() == "1.3.1"
+      assert AshPhoenixGenApi.version() == "1.4.0"
     end
   end
 
@@ -73,6 +73,7 @@ defmodule AshPhoenixGenApi.CoverageGapsTest do
     test "extension-only resource exposes an empty fun_configs list" do
       # Compiling this fixture exercised the empty-entities transformer branch.
       assert Code.ensure_loaded!(AshPhoenixGenApi.InfoFixtures.EmptyGenApiResource)
+
       assert AshPhoenixGenApi.Resource.Info.fun_configs(
                AshPhoenixGenApi.InfoFixtures.EmptyGenApiResource
              ) == []

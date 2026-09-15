@@ -663,4 +663,109 @@ defmodule AshPhoenixGenApi.Verifiers.VerifyActionConfigsTest do
       end
     end
   end
+
+  describe "result encoder verification" do
+    test "accepts valid result_encoder values" do
+      refute_dsl_errors do
+        defmodule Elixir.ValidResultEncoderResource do
+          use Ash.Resource,
+            domain: nil,
+            extensions: [AshPhoenixGenApi.Resource]
+
+          attributes do
+            uuid_primary_key(:id)
+          end
+
+          actions do
+            defaults([:create, :read])
+          end
+
+          gen_api do
+            service "test"
+
+            action :create do
+              request_type "create"
+              result_encoder(:map)
+            end
+
+            mfa :custom_encoder do
+              request_type "custom_encoder"
+              mfa({SomeEndpoint, :call, []})
+              arg_types(%{})
+              result_encoder({MyEncoder, :encode, []})
+            end
+
+            mfa :struct_encoder do
+              request_type "struct_encoder"
+              mfa({SomeEndpoint, :call, []})
+              arg_types(%{})
+              result_encoder(:struct)
+            end
+          end
+        end
+      end
+    end
+
+    test "rejects invalid result_encoder on an action" do
+      err =
+        assert_dsl_error %Spark.Error.DslError{path: [:gen_api]} do
+          defmodule Elixir.BadActionResultEncoderResource do
+            use Ash.Resource,
+              domain: nil,
+              extensions: [AshPhoenixGenApi.Resource]
+
+            attributes do
+              uuid_primary_key(:id)
+            end
+
+            actions do
+              defaults([:create])
+            end
+
+            gen_api do
+              service "test"
+
+              action :create do
+                request_type "create"
+                result_encoder({:list, :map})
+              end
+            end
+          end
+        end
+
+      assert err.message =~ "invalid result_encoder `{:list, :map}`"
+    end
+
+    test "rejects invalid result_encoder on an mfa" do
+      err =
+        assert_dsl_error %Spark.Error.DslError{path: [:gen_api]} do
+          defmodule Elixir.BadMfaResultEncoderResource do
+            use Ash.Resource,
+              domain: nil,
+              extensions: [AshPhoenixGenApi.Resource]
+
+            attributes do
+              uuid_primary_key(:id)
+            end
+
+            actions do
+              defaults([:create])
+            end
+
+            gen_api do
+              service "test"
+
+              mfa :probe do
+                request_type "probe"
+                mfa({SomeEndpoint, :call, []})
+                arg_types(%{})
+                result_encoder(:maps)
+              end
+            end
+          end
+        end
+
+      assert err.message =~ "invalid result_encoder `:maps`"
+    end
+  end
 end
