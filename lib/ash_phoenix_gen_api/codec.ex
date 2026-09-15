@@ -151,9 +151,8 @@ defmodule AshPhoenixGenApi.Codec do
     {:error, error}
   end
 
-  # Destroy actions return :ok directly, not {:ok, :ok}
-  def encode_result(:ok, _encoder) do
-    :ok
+  def encode_result(value, encoder) do
+    {:ok, encode_value(value, encoder)}
   end
 
   @doc """
